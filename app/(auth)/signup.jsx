@@ -10,10 +10,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 const COLORS = {
   bg: '#0A0A0A',
@@ -24,6 +26,7 @@ const COLORS = {
   gray: '#888888',
   lightGray: '#CCCCCC',
   inputBg: '#1E1E1E',
+  errorBg: '#2A1215',
 };
 
 export default function SignUpScreen() {
@@ -44,7 +47,7 @@ export default function SignUpScreen() {
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => ({ ...prev, [field]: null }));
+    setErrors((prev) => ({ ...prev, [field]: null, general: null }));
   };
 
   const validate = () => {
@@ -69,26 +72,75 @@ export default function SignUpScreen() {
     if (!validate()) return;
     setLoading(true);
 
-    // ── TODO: Replace with your real API call ──────────────────────────────
-    // const response = await axios.post(`${API_URL}/api/auth/register`, {
-    //   firstName: form.firstName,
-    //   lastName: form.lastName,
-    //   email: form.email,
-    //   phone: form.phone,
-    //   password: form.password,
-    //   role: 'member',
-    // });
-    // router.replace('/(auth)/login');
-    // ──────────────────────────────────────────────────────────────────────
-
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert(
-        'Account Created!',
-        `Welcome, ${form.firstName}!\n\nYour member account has been created.\n(Connect your backend to save this data)`,
-        [{ text: 'Go to Login', onPress: () => router.replace('/(auth)/login') }]
+    try {
+      // Step 1: Create account in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        form.email.trim(),
+        form.password
       );
-    }, 1400);
+      const uid = userCredential.user.uid;
+      const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`;
+
+      // Step 2: Create initial user document in Firestore
+      // programSetupDone is false — will be set to true after program builder
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        name: fullName,
+        email: form.email.trim(),
+        role: 'member',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        programSetupDone: false,
+        disabled: false,
+        // Profile fields — filled in during program builder
+        age: null,
+        bmi: null,
+        bmiLabel: null,
+        currentLevel: null,
+        daysPerWeek: null,
+        experience: null,
+        goal: null,
+        height: null,
+        injuries: [],
+        nickname: null,
+        programGeneratedAt: null,
+        stance: null,
+        weight: null,
+        weeklyProgram: null,
+        weeklyPct: 0,
+        streak: 0,
+        totalWorkouts: 0,
+      });
+
+      // Step 3: Go to program builder, passing name so it can pre-fill
+      router.replace({
+        pathname: '/(auth)/program-builder',
+        params: { name: fullName },
+      });
+
+    } catch (error) {
+      let message = 'Sign up failed. Please try again.';
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          message = 'This email is already registered. Try logging in instead.';
+          break;
+        case 'auth/weak-password':
+          message = 'Password is too weak. Use at least 8 characters.';
+          break;
+        case 'auth/invalid-email':
+          message = 'Invalid email address.';
+          break;
+        case 'auth/network-request-failed':
+          message = 'No internet connection. Please check your network.';
+          break;
+        default:
+          message = 'Sign up failed. Please try again.';
+      }
+      setErrors({ general: message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -117,14 +169,21 @@ export default function SignUpScreen() {
           {/* ── FORM CARD ── */}
           <View style={styles.card}>
 
-            {/* First Name + Last Name Row */}
+            {errors.general && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={COLORS.red} />
+                <Text style={styles.errorBoxText}>{errors.general}</Text>
+              </View>
+            )}
+
+            {/* First Name + Last Name */}
             <View style={styles.nameRow}>
               <View style={[styles.fieldGroup, { flex: 1, marginRight: 10 }]}>
                 <Text style={styles.label}>First Name</Text>
                 <View style={[styles.inputRow, errors.firstName && styles.inputError]}>
                   <TextInput
                     style={styles.input}
-                    placeholder="Juan"
+                    placeholder="Rafael"
                     placeholderTextColor={COLORS.gray}
                     value={form.firstName}
                     onChangeText={(t) => updateField('firstName', t)}
@@ -133,7 +192,6 @@ export default function SignUpScreen() {
                 </View>
                 {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
               </View>
-
               <View style={[styles.fieldGroup, { flex: 1 }]}>
                 <Text style={styles.label}>Last Name</Text>
                 <View style={[styles.inputRow, errors.lastName && styles.inputError]}>
@@ -157,7 +215,7 @@ export default function SignUpScreen() {
                 <Ionicons name="mail-outline" size={18} color={COLORS.gray} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="juandelacruz@email.com"
+                  placeholder="raf@email.com"
                   placeholderTextColor={COLORS.gray}
                   value={form.email}
                   onChangeText={(t) => updateField('email', t)}
@@ -201,11 +259,7 @@ export default function SignUpScreen() {
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  <Ionicons
-                    name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                    size={18}
-                    color={COLORS.gray}
-                  />
+                  <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color={COLORS.gray} />
                 </TouchableOpacity>
               </View>
               {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
@@ -226,27 +280,17 @@ export default function SignUpScreen() {
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeBtn}>
-                  <Ionicons
-                    name={showConfirm ? 'eye-outline' : 'eye-off-outline'}
-                    size={18}
-                    color={COLORS.gray}
-                  />
+                  <Ionicons name={showConfirm ? 'eye-outline' : 'eye-off-outline'} size={18} color={COLORS.gray} />
                 </TouchableOpacity>
               </View>
-              {errors.confirmPassword && (
-                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-              )}
+              {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
             </View>
 
-            {/* Hint */}
             <View style={styles.hintBox}>
               <Ionicons name="information-circle-outline" size={14} color={COLORS.gray} />
-              <Text style={styles.hintText}>
-                Password must be at least 8 characters long.
-              </Text>
+              <Text style={styles.hintText}>Password must be at least 8 characters long.</Text>
             </View>
 
-            {/* Sign Up Button */}
             <TouchableOpacity
               style={[styles.signupBtn, loading && styles.btnDisabled]}
               onPress={handleSignUp}
@@ -261,7 +305,6 @@ export default function SignUpScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ── LOGIN LINK ── */}
           <View style={styles.loginRow}>
             <Text style={styles.loginText}>Already have an account? </Text>
             <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
@@ -276,108 +319,56 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-
-  // Header
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
   backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border,
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
   },
   headerText: { flex: 1 },
-  appName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.red,
-    letterSpacing: 3,
-    marginBottom: 2,
-  },
+  appName: { fontSize: 14, fontWeight: '800', color: COLORS.red, letterSpacing: 3, marginBottom: 2 },
   pageTitle: { fontSize: 22, fontWeight: '900', color: COLORS.white },
   pageSub: { fontSize: 13, color: COLORS.gray, marginTop: 1 },
-
-  // Card
   card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.card, borderRadius: 20,
+    padding: 24, borderWidth: 1, borderColor: COLORS.border,
   },
-
-  // Name Row
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.errorBg, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.red,
+    padding: 12, marginBottom: 16, gap: 8,
+  },
+  errorBoxText: { color: COLORS.red, fontSize: 13, flex: 1 },
   nameRow: { flexDirection: 'row' },
-
-  // Fields
   fieldGroup: { marginBottom: 16 },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.lightGray,
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.lightGray, marginBottom: 8, letterSpacing: 0.5 },
   inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 14,
-    height: 52,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.inputBg, borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: 14, height: 52,
   },
   inputError: { borderColor: COLORS.red },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, color: COLORS.white, fontSize: 15 },
   eyeBtn: { padding: 4 },
   errorText: { color: COLORS.red, fontSize: 12, marginTop: 5, marginLeft: 2 },
-
-  // Hint
   hintBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 20,
-    gap: 6,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1A1A1A', borderRadius: 8,
+    padding: 10, marginBottom: 20, gap: 6,
   },
   hintText: { color: COLORS.gray, fontSize: 12, flex: 1 },
-
-  // Sign Up Button
   signupBtn: {
-    backgroundColor: COLORS.red,
-    borderRadius: 12,
-    height: 54,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.red,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: COLORS.red, borderRadius: 12, height: 54,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: COLORS.red, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
   btnDisabled: { opacity: 0.7 },
-  signupBtnText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-
-  // Login Row
+  signupBtnText: { color: COLORS.white, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
   loginText: { color: COLORS.gray, fontSize: 14 },
   loginLink: { color: COLORS.red, fontSize: 14, fontWeight: '700' },

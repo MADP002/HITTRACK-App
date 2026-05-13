@@ -10,10 +10,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase';
 
 const COLORS = {
   bg: '#0A0A0A',
@@ -24,6 +26,7 @@ const COLORS = {
   gray: '#888888',
   lightGray: '#CCCCCC',
   inputBg: '#1E1E1E',
+  errorBg: '#2A1215',
 };
 
 export default function LoginScreen() {
@@ -48,23 +51,68 @@ export default function LoginScreen() {
     if (!validate()) return;
     setLoading(true);
 
-    // ── TODO: Replace with your real API call ──────────────────────────────
-    // const response = await axios.post(`${API_URL}/api/auth/login`, { email, password });
-    // const { token, user } = response.data;
-    //
-    // Then route based on user.role:
-    //   if (user.role === 'member') router.replace('/(member)/home');
-    //   if (user.role === 'coach')  router.replace('/(coach)/clients');
-    //   if (user.role === 'admin')  router.replace('/(admin)/members');
-    // ──────────────────────────────────────────────────────────────────────
+    try {
+      // Step 1: Sign in with Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const uid = userCredential.user.uid;
 
-    setTimeout(() => {
+      // Step 2: Get the user's document from Firestore using their uid
+      const userDoc = await getDoc(doc(db, 'users', uid));
+
+      if (!userDoc.exists()) {
+        setErrors({ general: 'Account not found. Please contact support.' });
+        setLoading(false);
+        return;
+      }
+
+      const userData = userDoc.data();
+
+      // Step 3: Check if account is disabled by admin
+      if (userData.disabled === true) {
+        setErrors({ general: 'Your account has been disabled. Please contact the admin.' });
+        setLoading(false);
+        return;
+      }
+
+      // Step 4: Route to correct interface based on role field in Firestore
+      const role = userData.role;
+
+      if (role === 'member') {
+        router.replace('/(member)/home');
+      } else if (role === 'coach') {
+        router.replace('/(coach)/clients');
+      } else if (role === 'admin') {
+        router.replace('/(admin)/members');
+      } else {
+        setErrors({ general: 'Unknown account type. Please contact support.' });
+      }
+
+    } catch (error) {
+      let message = 'Login failed. Please try again.';
+
+      switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          message = 'Incorrect email or password.';
+          break;
+        case 'auth/user-disabled':
+          message = 'Your account has been disabled. Please contact the admin.';
+          break;
+        case 'auth/too-many-requests':
+          message = 'Too many failed attempts. Please try again later.';
+          break;
+        case 'auth/network-request-failed':
+          message = 'No internet connection. Please check your network.';
+          break;
+        default:
+          message = 'Login failed. Please try again.';
+      }
+
+      setErrors({ general: message });
+    } finally {
       setLoading(false);
-      Alert.alert(
-        'Login',
-        `Attempting login as:\n${email}\n\n(Connect your backend to enable real login)`
-      );
-    }, 1200);
+    }
   };
 
   return (
@@ -92,6 +140,14 @@ export default function LoginScreen() {
             <Text style={styles.cardTitle}>Welcome Back</Text>
             <Text style={styles.cardSub}>Log in to your account</Text>
 
+            {/* General Error Banner */}
+            {errors.general && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={COLORS.red} />
+                <Text style={styles.errorBoxText}>{errors.general}</Text>
+              </View>
+            )}
+
             {/* Email Field */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
@@ -102,7 +158,10 @@ export default function LoginScreen() {
                   placeholder="Enter your email"
                   placeholderTextColor={COLORS.gray}
                   value={email}
-                  onChangeText={(t) => { setEmail(t); setErrors((e) => ({ ...e, email: null })); }}
+                  onChangeText={(t) => {
+                    setEmail(t);
+                    setErrors((e) => ({ ...e, email: null, general: null }));
+                  }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -121,7 +180,10 @@ export default function LoginScreen() {
                   placeholder="Enter your password"
                   placeholderTextColor={COLORS.gray}
                   value={password}
-                  onChangeText={(t) => { setPassword(t); setErrors((e) => ({ ...e, password: null })); }}
+                  onChangeText={(t) => {
+                    setPassword(t);
+                    setErrors((e) => ({ ...e, password: null, general: null }));
+                  }}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                 />
@@ -135,11 +197,6 @@ export default function LoginScreen() {
               </View>
               {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
             </View>
-
-            {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotBtn}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
 
             {/* Login Button */}
             <TouchableOpacity
@@ -177,8 +234,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 40,
   },
-
-  // Header
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
     width: 80,
@@ -195,20 +250,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   logoGlove: { fontSize: 38 },
-  appName: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: COLORS.white,
-    letterSpacing: 6,
-  },
-  tagline: {
-    fontSize: 13,
-    color: COLORS.gray,
-    marginTop: 4,
-    letterSpacing: 1.5,
-  },
-
-  // Card
+  appName: { fontSize: 32, fontWeight: '900', color: COLORS.white, letterSpacing: 6 },
+  tagline: { fontSize: 13, color: COLORS.gray, marginTop: 4, letterSpacing: 1.5 },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: 20,
@@ -218,16 +261,20 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 22, fontWeight: '800', color: COLORS.white, marginBottom: 4 },
   cardSub: { fontSize: 14, color: COLORS.gray, marginBottom: 24 },
-
-  // Fields
-  fieldGroup: { marginBottom: 16 },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.lightGray,
-    marginBottom: 8,
-    letterSpacing: 0.5,
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.errorBg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
   },
+  errorBoxText: { color: COLORS.red, fontSize: 13, flex: 1 },
+  fieldGroup: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.lightGray, marginBottom: 8, letterSpacing: 0.5 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,12 +290,8 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: COLORS.white, fontSize: 15 },
   eyeBtn: { padding: 4 },
   errorText: { color: COLORS.red, fontSize: 12, marginTop: 5, marginLeft: 2 },
-
-  // Forgot
   forgotBtn: { alignSelf: 'flex-end', marginBottom: 24, marginTop: -4 },
   forgotText: { color: COLORS.red, fontSize: 13, fontWeight: '600' },
-
-  // Login Button
   loginBtn: {
     backgroundColor: COLORS.red,
     borderRadius: 12,
@@ -262,14 +305,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   btnDisabled: { opacity: 0.7 },
-  loginBtnText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 2,
-  },
-
-  // Sign Up Row
+  loginBtnText: { color: COLORS.white, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
   signupRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
   signupText: { color: COLORS.gray, fontSize: 14 },
   signupLink: { color: COLORS.red, fontSize: 14, fontWeight: '700' },
