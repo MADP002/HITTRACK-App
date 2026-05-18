@@ -82,7 +82,7 @@ export default function LoginScreen() {
       } else if (role === 'coach') {
         router.replace('/(coach)/clients');
       } else if (role === 'admin') {
-        router.replace('/(admin)/members');
+        router.replace('/(admin)/overview');
       } else {
         setErrors({ general: 'Unknown account type. Please contact support.' });
       }
