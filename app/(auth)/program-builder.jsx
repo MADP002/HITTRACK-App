@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  stepItem: { alignItems: 'center', gap: 4 },
+  stepItem: { alignItems: 'center', gap: 4, width: 64 },
   stepDot: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: COLORS.inputBg,
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
   },
   stepDotActive: { borderColor: COLORS.red, backgroundColor: '#2A1215' },
   stepDotDone:   { borderColor: COLORS.green, backgroundColor: COLORS.green },
-  stepLabel: { fontSize: 9, color: COLORS.gray, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
+  stepLabel: { fontSize: 9, color: COLORS.gray, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center', width: 60 },
   stepLabelActive: { color: COLORS.red },
   stepLine: { flex: 1, height: 2, backgroundColor: COLORS.border, marginBottom: 14 },
   stepLineDone: { backgroundColor: COLORS.green },
@@ -754,8 +754,8 @@ const styles = StyleSheet.create({
   },
   selectCardActive: { borderColor: COLORS.red, backgroundColor: '#2A1215' },
   selectCardEmoji: { fontSize: 28, marginBottom: 8 },
-  selectCardTitle: { fontSize: 13, fontWeight: '700', color: COLORS.white, marginBottom: 4, textAlign: 'center' },
-  selectCardDesc:  { fontSize: 11, color: COLORS.gray, textAlign: 'center', lineHeight: 16 },
+  selectCardTitle: { fontSize: 13, fontWeight: '700', color: COLORS.white, marginBottom: 4, textAlign: 'center', alignSelf: 'stretch' },
+  selectCardDesc:  { fontSize: 11, color: COLORS.gray, textAlign: 'center', lineHeight: 16, alignSelf: 'stretch' },
   checkBadge: {
     position: 'absolute', top: 8, right: 8,
     width: 20, height: 20, borderRadius: 10,
