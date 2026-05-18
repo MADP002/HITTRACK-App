@@ -1,6 +1,5 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet } from 'react-native';
 
 const BLUE = '#42a5f5';
 
@@ -43,7 +42,7 @@ export default function CoachLayout() {
       <Tabs.Screen
         name="announcements"
         options={{
-          title: 'Announcements',
+          title: 'Announce',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'megaphone' : 'megaphone-outline'} size={22} color={color} />
           ),
@@ -52,13 +51,13 @@ export default function CoachLayout() {
       <Tabs.Screen
         name="forum"
         options={{
-          title: 'Forum',
+          title: 'Inbox',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
           ),
         }}
       />
-      {/* Hidden routes — not shown in tab bar */}
+      {/* Hidden routes */}
       <Tabs.Screen name="member-detail" options={{ href: null }} />
     </Tabs>
   );
