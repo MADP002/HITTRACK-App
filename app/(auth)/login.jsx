@@ -80,7 +80,7 @@ export default function LoginScreen() {
       if (role === 'member') {
         router.replace('/(member)/home');
       } else if (role === 'coach') {
-        router.replace('/(coach)/clients');
+        router.replace('/(coach)/home');
       } else if (role === 'admin') {
         router.replace('/(admin)/overview');
       } else {
