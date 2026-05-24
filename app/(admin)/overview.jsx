@@ -95,6 +95,7 @@ export default function AdminOverviewScreen() {
   const workedOut     = members.filter(m => (m.totalWorkouts || 0) > 0).length;
   const inactive      = members.filter(m => m.status === 'inactive').length;
   const approvedCoaches = coaches.filter(c => c.role === 'coach').length;
+  const pendingCoaches  = coaches.filter(c => c.role === 'coach_pending').length;
 
   // Distribution data
   const levels = ['Beginner', 'Intermediate', 'Advanced'];
@@ -163,6 +164,31 @@ export default function AdminOverviewScreen() {
             </View>
           ))}
         </View>
+
+        {/* ── PENDING COACHES ALERT — only shown when there are pending applications ── */}
+        {pendingCoaches > 0 && (
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 12,
+              backgroundColor: '#1A1200', borderRadius: 16,
+              borderWidth: 1.5, borderColor: '#F5C84266',
+              padding: 16,
+            }}
+            onPress={() => router.push('/(admin)/users')}
+            activeOpacity={0.85}
+          >
+            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: '#F5C84222', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 22 }}>⏳</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: '#F5C842', marginBottom: 2 }}>
+                {pendingCoaches} Coach Application{pendingCoaches !== 1 ? 's' : ''} Waiting
+              </Text>
+              <Text style={{ fontSize: 12, color: '#888888' }}>Tap to review in Users → Coaches</Text>
+            </View>
+            <Text style={{ fontSize: 20 }}>→</Text>
+          </TouchableOpacity>
+        )}
 
         {/* ── LEVEL DISTRIBUTION ── */}
         <View style={s.card}>
