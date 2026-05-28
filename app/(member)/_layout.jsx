@@ -70,6 +70,7 @@ export default function MemberLayout() {
       />
       {/* Hidden routes */}
       <Tabs.Screen name="boxing-training" options={{ href: null }} />
+      <Tabs.Screen name="about" options={{ href: null }} />
     </Tabs>
   );
 }

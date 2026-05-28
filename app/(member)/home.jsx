@@ -264,8 +264,8 @@ export default function HomeScreen() {
           <Text style={styles.topBarSub}>Member Dashboard</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(member)/forum')}>
-            <Ionicons name="chatbubbles-outline" size={22} color={COLORS.lightGray} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(member)/about')}>
+            <Ionicons name="information-circle-outline" size={22} color={COLORS.lightGray} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowAnnouncements(true)}>
             <Ionicons name="megaphone-outline" size={22} color={COLORS.lightGray} />
