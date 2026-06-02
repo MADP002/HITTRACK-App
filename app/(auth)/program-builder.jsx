@@ -7,6 +7,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { generateTrainingProgram } from '../../lib/trainingPrograms';
 import { auth, db } from '../../firebase';
 
 const { width } = Dimensions.get('window');
@@ -182,6 +183,27 @@ export default function ProgramBuilder() {
           weeklyPct:     0,
           updatedAt:     new Date().toISOString(),
         }, { merge: true });
+
+        // Generate and save the training program to workouts/{uid}
+        try {
+          const trainingProgram = generateTrainingProgram(
+            profile.stance      || 'Orthodox',
+            profile.goal        || 'Learn Boxing',
+            profile.experience  || 'Beginner'
+          );
+          await setDoc(doc(db, 'workouts', user.uid), {
+            trainingProgram:         trainingProgram.trainings,
+            trainingCurrentLevel:    trainingProgram.currentLevel,
+            trainingLevelStars:      trainingProgram.levelStars,
+            trainingCurrentIndex:    0,
+            trainingCompletedLevels: [],
+            trainingGoal:            trainingProgram.goal,
+            trainingStance:          trainingProgram.stance,
+            trainingGeneratedAt:     trainingProgram.generatedAt,
+          }, { merge: true });
+        } catch (tErr) {
+          console.warn('Training program save warning:', tErr.message);
+        }
       }
     } catch (err) {
       console.warn('Firestore save warning:', err.message);
