@@ -133,7 +133,7 @@ export default function HomeScreen() {
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((n) => n.audience === 'all' || !n.audience);
         setAnnouncements(all.slice(0, 10));
-      }, () => {});
+      }, (e) => { console.warn('Announcements snapshot error:', e); });
       return () => unsub();
     } catch (e) { console.warn('Announcements error:', e); }
   }, []);
@@ -366,6 +366,27 @@ export default function HomeScreen() {
           )}
         </View>
 
+
+        {/* ── TRAINING LAB BUTTON ── */}
+        <TouchableOpacity
+          style={styles.trainingLabBtn}
+          onPress={() => router.push('/(member)/training-lab')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.trainingLabLeft}>
+            <View style={styles.trainingLabIconBox}>
+              <Text style={{ fontSize: 28 }}>🥊</Text>
+            </View>
+            <View>
+              <Text style={styles.trainingLabTitle}>Training Lab</Text>
+              <Text style={styles.trainingLabSub}>Start Training</Text>
+            </View>
+          </View>
+          <View style={styles.trainingLabArrow}>
+            <Text style={{ fontSize: 18, color: '#000', fontWeight: '900' }}>→</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* ── PROGRESS RING + STATS ── */}
         <View style={styles.ringSection}>
           <View style={{ alignItems: 'center', gap: 8 }}>
@@ -587,4 +608,18 @@ const styles = StyleSheet.create({
   tipDots:     { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   tipDot:      { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.border },
   tipDotActive:{ backgroundColor: COLORS.red, width: 20, borderRadius: 3 },
+
+
+  // Training Lab button
+  trainingLabBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.red, borderRadius: 18, padding: 18,
+    shadowColor: COLORS.red, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45, shadowRadius: 12, elevation: 8,
+  },
+  trainingLabLeft:   { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  trainingLabIconBox:{ width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  trainingLabTitle:  { fontSize: 18, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
+  trainingLabSub:    { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '600' },
+  trainingLabArrow:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
 });

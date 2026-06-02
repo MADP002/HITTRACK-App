@@ -70,7 +70,12 @@ export default function MemberLayout() {
       />
       {/* Hidden routes */}
       <Tabs.Screen name="boxing-training" options={{ href: null }} />
-      <Tabs.Screen name="about" options={{ href: null }} />
+      <Tabs.Screen name="about"                options={{ href: null }} />
+      <Tabs.Screen name="medical-certificate"  options={{ href: null }} />
+      <Tabs.Screen name="training-lab"         options={{ href: null }} />
+      <Tabs.Screen name="training-detail"      options={{ href: null }} />
+      <Tabs.Screen name="training-camera"      options={{ href: null }} />
+      <Tabs.Screen name="training-complete"    options={{ href: null }} />
     </Tabs>
   );
 }
