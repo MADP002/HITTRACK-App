@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, ActivityIndicator, Alert,
-  Modal, Dimensions,
+  Modal, Dimensions, Linking, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,6 +47,9 @@ export default function MemberDetailScreen() {
   const [msgThread,    setMsgThread]    = useState([]);
   const [sendingMsg,   setSendingMsg]   = useState(false);
   const msgEndRef = useRef(null);
+  const [recordings,  setRecordings]  = useState([]);
+  const [showCert,    setShowCert]    = useState(false);
+  const [certLoading, setCertLoading] = useState(false);
 
   // Load coach profile
   useEffect(() => {
@@ -102,6 +105,25 @@ export default function MemberDetailScreen() {
       finally { setLoading(false); }
     };
     load();
+  }, [uid]);
+
+  // Load training recordings sent to this coach by this member
+  useEffect(() => {
+    if (!uid) return;
+    const coachUid = auth.currentUser?.uid;
+    if (!coachUid) return;
+    const q = query(
+      collection(db, 'trainingRecordings'),
+      where('uid',      '==', uid),
+      where('coachUid', '==', coachUid)
+    );
+    const unsub = onSnapshot(q, snap => {
+      const recs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
+      setRecordings(recs);
+    }, console.error);
+    return () => unsub();
   }, [uid]);
 
   // Load feedback (real-time)
@@ -511,6 +533,38 @@ export default function MemberDetailScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ── MEDICAL CERTIFICATE ── only shown if member has injuries */}
+        {member?.injuries && member.injuries.length > 0 && (
+          <View style={[styles.card, { borderColor: member.medicalCert?.submitted ? COLORS.green + '44' : COLORS.red + '44' }]}>
+            <View style={styles.certHeader}>
+              <Ionicons
+                name={member.medicalCert?.submitted ? 'shield-checkmark-outline' : 'warning-outline'}
+                size={20}
+                color={member.medicalCert?.submitted ? COLORS.green : COLORS.red}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>🏥 Medical Condition</Text>
+                <Text style={styles.certInjuryText}>{member.injuries}</Text>
+              </View>
+            </View>
+            {member.medicalCert?.submitted ? (
+              <TouchableOpacity
+                style={styles.viewCertBtn}
+                onPress={() => setShowCert(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="document-text-outline" size={16} color={COLORS.blue} />
+                <Text style={styles.viewCertBtnText}>View Submitted Medical Certificate</Text>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.blue} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.noCertBox}>
+                <Text style={styles.noCertText}>⏳ No medical certificate submitted yet.</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* ── PAST FEEDBACK ── */}
         {feedbackList.length > 0 && (
           <View style={styles.card}>
@@ -548,7 +602,91 @@ export default function MemberDetailScreen() {
           </View>
         )}
 
+        {/* ── SUBMITTED RECORDINGS ── */}
+        <View style={[styles.card, { borderColor: recordings.length > 0 ? COLORS.blue + '44' : COLORS.border }]}>
+          <View style={styles.recordingsHeader}>
+            <Ionicons name="videocam-outline" size={18} color={recordings.length > 0 ? COLORS.blue : COLORS.gray} />
+            <Text style={styles.sectionTitle}>
+              📹 Training Recordings {recordings.length > 0 ? `(${recordings.length})` : ''}
+            </Text>
+            {recordings.length > 0 && (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>{recordings.filter(r => !r.viewed).length} new</Text>
+              </View>
+            )}
+          </View>
+          {recordings.length === 0 ? (
+            <Text style={styles.noRecordingsText}>No recordings submitted yet. They will appear here when {member?.name?.split(' ')[0] || 'the member'} submits one.</Text>
+          ) : (
+            recordings.map((rec, i) => {
+              const ts = rec.submittedAt?.seconds ? new Date(rec.submittedAt.seconds * 1000) : null;
+              return (
+                <TouchableOpacity
+                  key={rec.id}
+                  style={[styles.recordingRow, i < recordings.length - 1 && { borderBottomWidth: 1, borderBottomColor: COLORS.border }]}
+                  onPress={() => rec.recordingUrl && Linking.openURL(rec.recordingUrl)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.recordingIcon}>
+                    <Ionicons name="play-circle" size={28} color={COLORS.blue} />
+                  </View>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.recordingName}>{rec.trainingName || rec.trainingId}</Text>
+                    <View style={styles.recordingMeta}>
+                      <Text style={styles.recordingLevel}>{rec.level || 'Beginner'}</Text>
+                      <Text style={styles.recordingDot}>·</Text>
+                      <Text style={styles.recordingReps}>{rec.properReps || 0} proper reps</Text>
+                    </View>
+                    {ts && <Text style={styles.recordingDate}>{ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>}
+                  </View>
+                  {!rec.viewed && <View style={styles.unviewedDot} />}
+                  <Ionicons name="open-outline" size={16} color={COLORS.gray} />
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+
       </ScrollView>
+
+      {/* ── MEDICAL CERT VIEWER MODAL ── */}
+      <Modal visible={showCert} transparent animationType="slide" onRequestClose={() => setShowCert(false)}>
+        <View style={styles.certModalOverlay}>
+          <View style={styles.certModalCard}>
+            <View style={styles.certModalHeader}>
+              <Text style={styles.certModalTitle}>🏥 Medical Certificate</Text>
+              <TouchableOpacity onPress={() => setShowCert(false)}>
+                <Ionicons name="close" size={22} color={COLORS.gray} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.certMemberName}>{member?.name}</Text>
+            <Text style={styles.certInjuryLabel}>Reported condition: <Text style={{ color: COLORS.white }}>{member?.injuries}</Text></Text>
+
+            {member?.medicalCert?.fileType?.startsWith('image/') ? (
+              <Image
+                source={{ uri: member.medicalCert.url }}
+                style={styles.certImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.certDocBox}>
+                <Ionicons name="document-text-outline" size={48} color={COLORS.blue} />
+                <Text style={styles.certFileName} numberOfLines={1}>{member?.medicalCert?.fileName}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.openCertBtn}
+              onPress={() => member?.medicalCert?.url && Linking.openURL(member.medicalCert.url)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="open-outline" size={16} color={COLORS.white} />
+              <Text style={styles.openCertBtnText}>Open Full Certificate</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -726,4 +864,40 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.blue,
     justifyContent: 'center', alignItems: 'center',
   },
+
+  // Medical cert
+  certHeader:    { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
+  certInjuryText:{ fontSize: 12, color: COLORS.red, fontWeight: '600', marginTop: 2 },
+  viewCertBtn:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.blue + '18', borderRadius: 10, borderWidth: 1, borderColor: COLORS.blue + '33', padding: 12 },
+  viewCertBtnText:{ flex: 1, fontSize: 13, color: COLORS.blue, fontWeight: '700' },
+  noCertBox:     { backgroundColor: COLORS.inputBg, borderRadius: 10, padding: 12 },
+  noCertText:    { fontSize: 12, color: COLORS.gray, textAlign: 'center' },
+
+  // Recordings
+  recordingsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  noRecordingsText: { fontSize: 12, color: COLORS.gray, lineHeight: 18, textAlign: 'center', paddingVertical: 8 },
+  recordingRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  recordingIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.blue + '18', justifyContent: 'center', alignItems: 'center' },
+  recordingName: { fontSize: 13, fontWeight: '700', color: COLORS.white },
+  recordingMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  recordingLevel:{ fontSize: 10, color: COLORS.blue, fontWeight: '700', textTransform: 'uppercase' },
+  recordingDot:  { fontSize: 10, color: COLORS.gray },
+  recordingReps: { fontSize: 10, color: COLORS.gray },
+  recordingDate: { fontSize: 10, color: COLORS.gray },
+  unviewedDot:   { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.red },
+  newBadge:      { backgroundColor: COLORS.blue + '22', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.blue + '44' },
+  newBadgeText:  { fontSize: 9, fontWeight: '800', color: COLORS.blue },
+
+  // Cert modal
+  certModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end' },
+  certModalCard:    { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 12, maxHeight: '80%' },
+  certModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  certModalTitle:   { fontSize: 18, fontWeight: '900', color: COLORS.white },
+  certMemberName:   { fontSize: 15, fontWeight: '700', color: COLORS.white },
+  certInjuryLabel:  { fontSize: 12, color: COLORS.gray },
+  certImage:        { width: '100%', height: 280, borderRadius: 12, backgroundColor: COLORS.inputBg },
+  certDocBox:       { alignItems: 'center', gap: 10, backgroundColor: COLORS.inputBg, borderRadius: 14, padding: 32 },
+  certFileName:     { fontSize: 13, color: COLORS.blue, fontWeight: '600', textAlign: 'center' },
+  openCertBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.blue, borderRadius: 12, height: 50 },
+  openCertBtnText:  { color: COLORS.white, fontSize: 14, fontWeight: '800' },
 });

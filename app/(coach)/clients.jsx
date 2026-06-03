@@ -148,6 +148,12 @@ export default function ClientsScreen() {
                         <Text style={[styles.tagText, { color: COLORS.gold }]} numberOfLines={1}>🎯 {m.goal}</Text>
                       </View>
                     )}
+                    {/* Medical condition indicator — only shown if member reported an injury */}
+                    {m.injuries && m.injuries.length > 0 && (
+                      <View style={[styles.tag, { backgroundColor: '#1A0505', borderColor: COLORS.red + '55' }]}>
+                        <Text style={[styles.tagText, { color: COLORS.red }]}>⚠️ Medical</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
