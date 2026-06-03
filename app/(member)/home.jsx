@@ -109,7 +109,9 @@ export default function HomeScreen() {
   const [loading,           setLoading]           = useState(true);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [announcements,     setAnnouncements]     = useState([]);
+  const [viewedIds,         setViewedIds]         = useState(new Set());
   const [tipIndex,          setTipIndex]          = useState(0);
+  const tipIndexRef = useRef(0); // keeps PanResponder in sync with current tipIndex
 
   const translateX  = useRef(new Animated.Value(0)).current;
   const cardOpacity = useRef(new Animated.Value(1)).current;
@@ -153,6 +155,14 @@ export default function HomeScreen() {
   const firstName = (userData?.name || 'Athlete').split(' ')[0];
   const initial   = (userData?.name || 'A')[0].toUpperCase();
 
+  // Keep tipIndexRef in sync so PanResponder always reads the latest value
+  useEffect(() => { tipIndexRef.current = tipIndex; }, [tipIndex]);
+
+
+  const markViewed = (id) => {
+    setViewedIds(prev => new Set([...prev, id]));
+  };
+
   // ── Tip swipe animation ───────────────────────────────────────────────────
   const animateToTip = (nextIdx, direction) => {
     const outX = direction === 'next' ? -SCREEN_WIDTH : SCREEN_WIDTH;
@@ -177,9 +187,9 @@ export default function HomeScreen() {
     },
     onPanResponderRelease: (_, g) => {
       if (g.dx < -60) {
-        animateToTip((tipIndex + 1) % TIPS.length, 'next');
+        animateToTip((tipIndexRef.current + 1) % TIPS.length, 'next');
       } else if (g.dx > 60) {
-        animateToTip((tipIndex - 1 + TIPS.length) % TIPS.length, 'prev');
+        animateToTip((tipIndexRef.current - 1 + TIPS.length) % TIPS.length, 'prev');
       } else {
         Animated.parallel([
           Animated.spring(translateX,  { toValue: 0, useNativeDriver: true }),
@@ -222,9 +232,9 @@ export default function HomeScreen() {
                 <Ionicons name="megaphone" size={16} color={COLORS.gold} />
                 <Text style={styles.announcementTitle}>Announcements</Text>
               </View>
-              {announcements.length > 0 && (
+              {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{announcements.length}</Text>
+                  <Text style={styles.badgeText}>{announcements.filter(a => !viewedIds.has(a.id)).length}</Text>
                 </View>
               )}
             </View>
@@ -236,21 +246,28 @@ export default function HomeScreen() {
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
-                {announcements.map((n, i) => (
-                  <View
-                    key={n.id}
-                    style={[styles.announcementItem, i < announcements.length - 1 && styles.itemBorder]}
-                  >
-                    <View style={styles.announcementIcon}>
-                      <Text style={{ fontSize: 14 }}>📢</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemTitle}>{n.title}</Text>
-                      <Text style={styles.itemMsg}>{n.message}</Text>
-                      <Text style={styles.itemFrom}>From: {n.from || 'Admin'}</Text>
-                    </View>
-                  </View>
-                ))}
+                {announcements.map((n, i) => {
+                  const isViewed = viewedIds.has(n.id);
+                  return (
+                    <TouchableOpacity
+                      key={n.id}
+                      style={[styles.announcementItem, i < announcements.length - 1 && styles.itemBorder, !isViewed && styles.announcementItemUnread]}
+                      onPress={() => markViewed(n.id)}
+                      activeOpacity={0.8}
+                    >
+                      {!isViewed && <View style={styles.unreadStripe} />}
+                      <View style={styles.announcementIcon}>
+                        <Text style={{ fontSize: 14 }}>📢</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.itemTitle, isViewed && { color: COLORS.gray }]}>{n.title}</Text>
+                        <Text style={styles.itemMsg}>{n.message}</Text>
+                        <Text style={styles.itemFrom}>From: {n.from || 'Admin'}</Text>
+                      </View>
+                      {!isViewed && <View style={styles.unreadDotSmall} />}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -269,10 +286,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowAnnouncements(true)}>
             <Ionicons name="megaphone-outline" size={22} color={COLORS.lightGray} />
-            {announcements.length > 0 && (
+            {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
               <View style={styles.notifDot}>
                 <Text style={styles.notifDotText}>
-                  {announcements.length > 9 ? '9+' : announcements.length}
+                  {announcements.filter(a => !viewedIds.has(a.id)).length > 9 ? '9+' : announcements.filter(a => !viewedIds.has(a.id)).length}
                 </Text>
               </View>
             )}
@@ -622,4 +639,8 @@ const styles = StyleSheet.create({
   trainingLabTitle:  { fontSize: 18, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
   trainingLabSub:    { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '600' },
   trainingLabArrow:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+
+  announcementItemUnread: { backgroundColor: '#0A0A18' },
+  unreadStripe:    { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: COLORS.red, borderRadius: 2 },
+  unreadDotSmall:  { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.red },
 });
