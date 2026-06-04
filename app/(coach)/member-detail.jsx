@@ -662,9 +662,9 @@ export default function MemberDetailScreen() {
             <Text style={styles.certMemberName}>{member?.name}</Text>
             <Text style={styles.certInjuryLabel}>Reported condition: <Text style={{ color: COLORS.white }}>{member?.injuries}</Text></Text>
 
-            {member?.medicalCert?.fileType?.startsWith('image/') ? (
+            {(member?.medicalCert?.base64?.startsWith('data:image') || member?.medicalCert?.fileType?.startsWith('image/')) ? (
               <Image
-                source={{ uri: member.medicalCert.url }}
+                source={{ uri: member.medicalCert.base64 }}
                 style={styles.certImage}
                 resizeMode="contain"
               />
@@ -672,17 +672,17 @@ export default function MemberDetailScreen() {
               <View style={styles.certDocBox}>
                 <Ionicons name="document-text-outline" size={48} color={COLORS.blue} />
                 <Text style={styles.certFileName} numberOfLines={1}>{member?.medicalCert?.fileName}</Text>
+                <Text style={{ fontSize: 11, color: COLORS.gray, textAlign: 'center', marginTop: 4 }}>
+                  PDF certificates are stored on file.{' '}Image certificates can be previewed above.
+                </Text>
               </View>
             )}
 
-            <TouchableOpacity
-              style={styles.openCertBtn}
-              onPress={() => member?.medicalCert?.url && Linking.openURL(member.medicalCert.url)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="open-outline" size={16} color={COLORS.white} />
-              <Text style={styles.openCertBtnText}>Open Full Certificate</Text>
-            </TouchableOpacity>
+            {/* base64 certs are displayed above — no external URL to open */}
+            <View style={[styles.openCertBtn, { backgroundColor: COLORS.green }]}>
+              <Ionicons name="shield-checkmark-outline" size={16} color="#000" />
+              <Text style={[styles.openCertBtnText, { color: '#000' }]}>Certificate on File ✓</Text>
+            </View>
           </View>
         </View>
       </Modal>
