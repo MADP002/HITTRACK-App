@@ -30,6 +30,7 @@ export default function TrainingLabScreen() {
   const [loading,       setLoading]       = useState(true);
   const [refreshing,    setRefreshing]    = useState(false);
   const [userData,      setUserData]      = useState({});
+  const [needsCert,     setNeedsCert]     = useState(false);
 
   const loadData = useCallback(async () => {
     const user = auth.currentUser;
@@ -40,13 +41,13 @@ export default function TrainingLabScreen() {
       const uData    = userSnap.exists() ? userSnap.data() : {};
       setUserData(uData);
 
-      // ── Injury check ──────────────────────────────────────────
-      // If user has an injury and hasn't submitted a medical cert,
-      // redirect them to the certificate screen
+      // ── Injury check ─────────────────────────────────────────────
+      // Show a gate card instead of redirecting (avoids navigation timing bugs)
       if (uData.injuries && uData.injuries.length > 0 && !uData.medicalCert?.submitted) {
-        router.replace('/(member)/medical-certificate');
+        setNeedsCert(true);
         return;
       }
+      setNeedsCert(false);
 
       // ── Load training program ─────────────────────────────────
       const workSnap = await getDoc(doc(db, 'workouts', user.uid));
@@ -162,8 +163,8 @@ export default function TrainingLabScreen() {
         </View>
 
         {/* ── TRAINING LIST ── */}
-        <Text style={s.sectionTitle}>Your Program</Text>
-        <View style={s.trainingList}>
+        {!needsCert && <Text style={s.sectionTitle}>Your Program</Text>}
+        {!needsCert && <View style={s.trainingList}>
           {trainings.map((training, index) => {
             const unlocked  = isUnlocked(index);
             const completed = isCompleted(training);
@@ -238,10 +239,33 @@ export default function TrainingLabScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </View>}
 
-        {/* Empty state */}
-        {trainings.length === 0 && (
+        {/* ── Medical cert gate — shown instead of training list ── */}
+        {needsCert && (
+          <View style={s.certGateCard}>
+            <Text style={{ fontSize: 56, textAlign: 'center' }}>🏥</Text>
+            <Text style={s.certGateTitle}>Medical Certificate Required</Text>
+            <Text style={s.certGateBody}>
+              You reported an injury or medical condition. A medical certificate must be submitted before you can access Training Lab.
+            </Text>
+            <View style={s.certGateInjuryPill}>
+              <Ionicons name="medical-outline" size={14} color={C.gold} />
+              <Text style={s.certGateInjuryText}>{userData.injuries}</Text>
+            </View>
+            <TouchableOpacity
+              style={s.certGateBtn}
+              onPress={() => router.push('/(member)/medical-certificate')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color={C.white} />
+              <Text style={s.certGateBtnText}>Submit Medical Certificate</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Empty state — program not generated yet */}
+        {!needsCert && trainings.length === 0 && (
           <View style={s.emptyBox}>
             <Text style={{ fontSize: 56 }}>🥊</Text>
             <Text style={s.emptyTitle}>No Program Found</Text>
@@ -301,4 +325,13 @@ const s = StyleSheet.create({
   emptyBox:  { alignItems: 'center', gap: 12, paddingTop: 40 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: C.white },
   emptySub:  { fontSize: 13, color: C.gray, textAlign: 'center', paddingHorizontal: 20 },
+
+  // Medical cert gate card
+  certGateCard:       { backgroundColor: C.card, borderRadius: 20, borderWidth: 1.5, borderColor: C.red + '55', padding: 24, alignItems: 'center', gap: 14, marginTop: 8 },
+  certGateTitle:      { fontSize: 20, fontWeight: '900', color: C.white, textAlign: 'center' },
+  certGateBody:       { fontSize: 13, color: C.gray, lineHeight: 22, textAlign: 'center' },
+  certGateInjuryPill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.gold + '18', borderRadius: 50, borderWidth: 1, borderColor: C.gold + '44', paddingHorizontal: 16, paddingVertical: 8 },
+  certGateInjuryText: { fontSize: 12, color: C.gold, fontWeight: '700', flex: 1 },
+  certGateBtn:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.red, borderRadius: 14, height: 52, paddingHorizontal: 24, justifyContent: 'center', width: '100%' },
+  certGateBtnText:    { fontSize: 14, fontWeight: '800', color: C.white },
 });

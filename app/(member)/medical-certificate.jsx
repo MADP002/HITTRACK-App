@@ -7,9 +7,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { auth, db, storage } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const C = {
   bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
@@ -80,18 +79,27 @@ export default function MedicalCertificateScreen() {
     setUploading(true);
     try {
       const user = auth.currentUser;
-      // Upload to Firebase Storage
-      const response  = await fetch(file.uri);
-      const blob      = await response.blob();
-      const storageRef = ref(storage, `medicalCerts/${user.uid}/${file.name}`);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
 
-      // Save to Firestore
+      // Read file as base64 data URI and store directly in Firestore
+      // Works on Firebase free plan — no external storage service needed
+      const base64 = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror  = reject;
+          reader.readAsDataURL(xhr.response);
+        };
+        xhr.onerror = () => reject(new Error('Failed to read file'));
+        xhr.responseType = 'blob';
+        xhr.open('GET', file.uri, true);
+        xhr.send(null);
+      });
+
       await updateDoc(doc(db, 'users', user.uid), {
         medicalCert: {
           submitted:   true,
-          url,
+          base64,
           fileName:    file.name,
           fileType:    file.type,
           submittedAt: serverTimestamp(),

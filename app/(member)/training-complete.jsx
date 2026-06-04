@@ -5,12 +5,11 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, db, storage } from '../../firebase';
+import { auth, db } from '../../firebase';
 import {
   doc, getDoc, updateDoc, addDoc, collection, getDocs,
   serverTimestamp,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getLevelLabel, getNextLevel, getLevelStars } from '../../lib/trainingPrograms';
 
 const C = {
@@ -171,7 +170,7 @@ export default function TrainingCompleteScreen() {
 
   const handleSubmitRecording = async () => {
     if (!selectedCoach) {
-      Alert.alert('Select a Coach', 'Please select a coach to send the recording to.');
+      Alert.alert('Select a Coach', 'Please select a coach to send your session to.');
       return;
     }
     setUploading(true);
@@ -180,18 +179,8 @@ export default function TrainingCompleteScreen() {
       const userSnap = await getDoc(doc(db, 'users', user.uid));
       const memberName = userSnap.exists() ? userSnap.data().name : 'Member';
 
-      let recordingUrl = null;
-      if (hasRecording) {
-        // Upload to Firebase Storage
-        const response   = await fetch(recordingUri);
-        const blob       = await response.blob();
-        const fileName   = `training_${trainingId}_${Date.now()}.mp4`;
-        const storageRef = ref(storage, `trainingRecordings/${user.uid}/${fileName}`);
-        await uploadBytes(storageRef, blob);
-        recordingUrl = await getDownloadURL(storageRef);
-      }
-
-      // Save recording reference to Firestore
+      // Save session report to Firestore — no video file needed
+      // (Firebase Storage requires paid plan; video upload will be added later)
       await addDoc(collection(db, 'trainingRecordings'), {
         uid:          user.uid,
         memberName,
@@ -202,7 +191,7 @@ export default function TrainingCompleteScreen() {
         level,
         properReps,
         duration,
-        recordingUrl,
+        recordingUrl: null,   // video upload not yet available on free plan
         submittedAt:  serverTimestamp(),
         viewed:       false,
       });
@@ -210,7 +199,7 @@ export default function TrainingCompleteScreen() {
       setSubmitted(true);
     } catch (e) {
       console.error(e);
-      Alert.alert('Upload failed', 'Could not submit the recording. Please try again.');
+      Alert.alert('Submit failed', 'Could not send your session report. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -278,12 +267,10 @@ export default function TrainingCompleteScreen() {
           {!submitted ? (
             <View style={s.recordingCard}>
               <Text style={s.recordingTitle}>
-                {hasRecording ? '📹 Submit Recording to Coach' : '📋 Share Your Session'}
+                {'📋 Submit Session Report to Coach'}
               </Text>
               <Text style={s.recordingBody}>
-                {hasRecording
-                  ? 'Send your training recording to a coach for feedback and review.'
-                  : 'Let your coach know you completed this training session.'
+                {'Send your session stats to a coach — they will see your rep count, level, and duration.'
                 }
               </Text>
 
@@ -311,7 +298,7 @@ export default function TrainingCompleteScreen() {
                   : <>
                       <Ionicons name="send-outline" size={18} color={C.white} />
                       <Text style={s.submitRecordingBtnText}>
-                        {hasRecording ? 'Submit Recording' : 'Notify Coach'}
+                        {'Send Session Report'}
                       </Text>
                     </>
                 }

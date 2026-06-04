@@ -7,7 +7,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { generateTrainingProgram } from '../../lib/trainingPrograms';
+import { generateTrainingProgram, PROGRAM_TEMPLATES, MOVEMENT_LIBRARY } from '../../lib/trainingPrograms';
 import { auth, db } from '../../firebase';
 
 const { width } = Dimensions.get('window');
@@ -94,10 +94,30 @@ export default function ProgramBuilder() {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
+  const [calculatedAge, setCalculatedAge] = useState(null);
+
+  // Load DOB from Firestore and calculate age — avoids re-asking what was given at signup
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    import('firebase/firestore').then(({ doc, getDoc }) => {
+      getDoc(doc(db, 'users', user.uid)).then(snap => {
+        if (!snap.exists()) return;
+        const dob = snap.data().dob; // stored as 'YYYY-MM-DD'
+        if (!dob) return;
+        const birth = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        setCalculatedAge(age);
+      });
+    });
+  }, []);
+
   const [form, setForm] = useState({
     name: passedName || '',
     nickname: '',
-    age: '',
     height: '',
     weight: '',
     stance: '',
@@ -117,9 +137,7 @@ export default function ProgramBuilder() {
     const e = {};
     if (step === 0) {
       if (!form.name.trim()) e.name = 'Name is required.';
-      if (!form.age) e.age = 'Age is required.';
-      else if (isNaN(form.age) || parseInt(form.age) < 10 || parseInt(form.age) > 80)
-        e.age = 'Enter a valid age (10–80).';
+      // Age is calculated from DOB — no validation needed
     }
     if (step === 1) {
       if (!form.height) e.height = 'Height is required.';
@@ -148,7 +166,7 @@ export default function ProgramBuilder() {
     const profile = {
       name:               form.name.trim(),
       nickname:           form.nickname.trim(),
-      age:                parseInt(form.age),
+      age:                calculatedAge,
       height:             parseFloat(form.height),
       weight:             parseFloat(form.weight),
       bmi:                parseFloat(bmi),
@@ -265,7 +283,7 @@ export default function ProgramBuilder() {
 
         {/* ── STEP CONTENT ── */}
         <View style={styles.card}>
-          {step === 0 && <StepBasic form={form} update={update} errors={errors} />}
+          {step === 0 && <StepBasic form={form} update={update} errors={errors} calculatedAge={calculatedAge} />}
           {step === 1 && <StepBody  form={form} update={update} errors={errors} bmi={bmi} bmiLabel={label} bmiColor={color} />}
           {step === 2 && <StepStyle form={form} update={update} errors={errors} />}
           {step === 3 && <StepGoals form={form} update={update} errors={errors} />}
@@ -295,7 +313,7 @@ export default function ProgramBuilder() {
 }
 
 // ── STEP 1: BASIC INFO ────────────────────────────────────────────────────────
-function StepBasic({ form, update, errors }) {
+function StepBasic({ form, update, errors, calculatedAge }) {
   return (
     <View style={styles.stepContent}>
       <FormField label="Full Name *" error={errors.name}>
@@ -318,16 +336,13 @@ function StepBasic({ form, update, errors }) {
           autoCapitalize="words"
         />
       </FormField>
-      <FormField label="Age *" error={errors.age}>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 22"
-          placeholderTextColor={COLORS.gray}
-          value={form.age}
-          onChangeText={(t) => update('age', t)}
-          keyboardType="number-pad"
-        />
-      </FormField>
+      {/* Age from DOB — read only, calculated from signup */}
+      {calculatedAge !== null && (
+        <View style={styles.agePill}>
+          <Text style={styles.agePillIcon}>🎂</Text>
+          <Text style={styles.agePillText}>Age: <Text style={styles.agePillAge}>{calculatedAge} years old</Text></Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -514,23 +529,40 @@ function StepGoals({ form, update, errors }) {
         </Text>
       </View>
 
-      {/* Program preview */}
-      {program && (
-        <View style={styles.previewBox}>
-          <Text style={styles.previewTitle}>
-            PROGRAM PREVIEW — {form.experience?.toUpperCase()} · {form.goal?.toUpperCase()}
-          </Text>
-          {program.map((ex, i) => (
-            <View key={i} style={[styles.previewRow, i < program.length - 1 && styles.previewRowBorder]}>
-              <View style={styles.previewNum}>
-                <Text style={styles.previewNumText}>{i + 1}</Text>
-              </View>
-              <Text style={styles.previewEx}>{ex}</Text>
-              <Text style={styles.previewDay}>Day {i + 1}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Program preview — shows first 5 real Training Lab movements */}
+      {form.goal && PROGRAM_TEMPLATES[form.goal] && (() => {
+        const stanceMap = { Orthodox: { lead: 'Left', rear: 'Right' }, Southpaw: { lead: 'Right', rear: 'Left' } };
+        const sm = stanceMap[form.stance] || stanceMap['Orthodox'];
+        const first5 = PROGRAM_TEMPLATES[form.goal].sequence.slice(0, 5);
+        const TYPE_COLORS = { punch: COLORS.red, defense: '#42a5f5', strength: '#c084fc' };
+        return (
+          <View style={styles.previewBox}>
+            <Text style={styles.previewTitle}>
+              YOUR FIRST 5 TRAININGS — {form.goal?.toUpperCase()}
+            </Text>
+            {first5.map((movId, i) => {
+              const mov = MOVEMENT_LIBRARY[movId];
+              if (!mov) return null;
+              let displayName = movId.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+              if (mov.hand === 'lead') displayName = sm.lead + ' ' + movId.replace('lead_','').split('_').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
+              if (mov.hand === 'rear') displayName = sm.rear + ' ' + movId.replace('rear_','').split('_').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
+              const tc = TYPE_COLORS[mov.type] || COLORS.gray;
+              return (
+                <View key={i} style={[styles.previewRow, i < first5.length - 1 && styles.previewRowBorder]}>
+                  <View style={[styles.previewNum, { backgroundColor: tc + '22', borderColor: tc + '55' }]}>
+                    <Text style={{ fontSize: 13 }}>{mov.icon}</Text>
+                  </View>
+                  <Text style={styles.previewEx}>{displayName}</Text>
+                  <View style={[styles.previewTypePill, { backgroundColor: tc + '18', borderColor: tc + '44' }]}>
+                    <Text style={[styles.previewTypeText, { color: tc }]}>{mov.type}</Text>
+                  </View>
+                </View>
+              );
+            })}
+            <Text style={styles.previewMore}>+ {PROGRAM_TEMPLATES[form.goal].sequence.length - 5} more trainings in your full program</Text>
+          </View>
+        );
+      })()}
     </View>
   );
 }
@@ -915,4 +947,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
   },
   startBtnText: { color: COLORS.white, fontSize: 16, fontWeight: '800', letterSpacing: 1 },
+
+  agePill:       { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#1A1A0A', borderRadius: 12, borderWidth: 1, borderColor: '#F5C84244', padding: 14, marginBottom: 4 },
+  agePillIcon:   { fontSize: 20 },
+  agePillText:   { fontSize: 13, color: COLORS.gray },
+  agePillAge:    { color: COLORS.gold, fontWeight: '800' },
+  previewTypePill:{ borderRadius: 50, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
+  previewTypeText:{ fontSize: 9, fontWeight: '700', textTransform: 'uppercase' },
+  previewMore:   { fontSize: 11, color: COLORS.gray, textAlign: 'center', paddingTop: 10, fontStyle: 'italic' },
 });
