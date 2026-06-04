@@ -232,9 +232,9 @@ const styles = StyleSheet.create({
     width: 16, height: 16, borderRadius: 8,
     justifyContent: 'center', alignItems: 'center',
   },
-  cardInfo:  { flex: 1, gap: 6 },
+  cardInfo:  { flex: 1, gap: 4, minWidth: 0 },
   cardName:  { fontSize: 14, fontWeight: '800', color: COLORS.white },
-  tagRow:    { flexDirection: 'row', gap: 6 },
+  tagRow:    { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   tag: {
     borderRadius: 50, borderWidth: 1,
     paddingHorizontal: 8, paddingVertical: 2,

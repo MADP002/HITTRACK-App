@@ -461,7 +461,7 @@ function StepStyle({ form, update, errors }) {
             activeOpacity={0.8}
           >
             <Text style={styles.expEmoji}>{ex.icon}</Text>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.expTitle}>{ex.id}</Text>
               <Text style={styles.expDesc}>{ex.desc}</Text>
             </View>
@@ -825,8 +825,8 @@ const styles = StyleSheet.create({
     marginBottom: 10, position: 'relative',
   },
   expEmoji: { fontSize: 24 },
-  expTitle: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-  expDesc:  { fontSize: 12, color: COLORS.gray, marginTop: 2 },
+  expTitle: { fontSize: 14, fontWeight: '700', color: COLORS.white, flexShrink: 1 },
+  expDesc:  { fontSize: 12, color: COLORS.gray, marginTop: 2, flexShrink: 1 },
 
   // Days
   daysRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
@@ -908,8 +908,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d2b1e', borderWidth: 2, borderColor: COLORS.green,
     justifyContent: 'center', alignItems: 'center',
   },
-  doneTitle: { fontSize: 28, fontWeight: '900', color: COLORS.white, textAlign: 'center' },
-  doneSub:   { fontSize: 14, color: COLORS.gray, textAlign: 'center', lineHeight: 22 },
+  doneTitle: { fontSize: 28, fontWeight: '900', color: COLORS.white, textAlign: 'center', alignSelf: 'stretch' },
+  doneSub:   { fontSize: 14, color: COLORS.gray, textAlign: 'center', lineHeight: 22, alignSelf: 'stretch' },
   summaryCard: {
     backgroundColor: COLORS.card, borderRadius: 20,
     padding: 20, borderWidth: 1, borderColor: COLORS.border, width: '100%',
@@ -920,9 +920,9 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: '#1A1A1A', borderRadius: 12,
     padding: 10, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center',
   },
-  statLabel: { fontSize: 8,  fontWeight: '700', color: COLORS.gray, letterSpacing: 0.5, marginBottom: 4 },
-  statVal:   { fontSize: 18, fontWeight: '900' },
-  statSub:   { fontSize: 9,  color: COLORS.gray, marginTop: 2, textAlign: 'center' },
+  statLabel: { fontSize: 8,  fontWeight: '700', color: COLORS.gray, letterSpacing: 0.5, marginBottom: 4, alignSelf: 'stretch', textAlign: 'center' },
+  statVal:   { fontSize: 18, fontWeight: '900', alignSelf: 'stretch', textAlign: 'center' },
+  statSub:   { fontSize: 9,  color: COLORS.gray, marginTop: 2, textAlign: 'center', alignSelf: 'stretch' },
   programRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   programRowBorder: { borderBottomWidth: 1, borderBottomColor: '#1E1E1E' },
   programNum: {
