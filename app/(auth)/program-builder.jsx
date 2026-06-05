@@ -487,11 +487,11 @@ function StepGoals({ form, update, errors }) {
       <View>
         <Text style={styles.groupLabel}>Main Goal *</Text>
         {errors.goal && <Text style={styles.groupError}>{errors.goal}</Text>}
-        <View style={styles.twoCol}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {GOALS.map((g) => (
             <TouchableOpacity
               key={g.id}
-              style={[styles.selectCard, form.goal === g.id && styles.selectCardActive, { flex: 1, marginHorizontal: 4, marginBottom: 8 }]}
+              style={[styles.selectCard, form.goal === g.id && styles.selectCardActive, { width: '47%' }]}
               onPress={() => update('goal', g.id)}
               activeOpacity={0.8}
             >
@@ -650,13 +650,13 @@ function DoneScreen({ form, bmi, bmiLabel, bmiColor, router }) {
           <View style={styles.statsGrid}>
             {[
               { label: 'BMI',      val: bmi,                    color: bmiColor, sub: bmiLabel },
-              { label: 'Stance',   val: form.stance === 'Orthodox' ? 'ORTH' : 'SOUTH', color: '#f5c842', sub: form.stance },
+              { label: 'Stance',   val: form.stance === 'Orthodox' ? 'ORT'  : 'STP',   color: '#f5c842', sub: form.stance },
               { label: 'Level',    val: form.experience?.slice(0, 3).toUpperCase(), color: COLORS.red, sub: form.experience },
               { label: 'Days/Wk', val: `${form.daysPerWeek}x`, color: COLORS.green, sub: 'Training' },
             ].map((item, i) => (
               <View key={i} style={styles.statBox}>
                 <Text style={styles.statLabel}>{item.label}</Text>
-                <Text style={[styles.statVal, { color: item.color }]}>{item.val}</Text>
+                <Text style={[styles.statVal, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit>{item.val}</Text>
                 <Text style={styles.statSub}>{item.sub}</Text>
               </View>
             ))}
@@ -808,8 +808,8 @@ const styles = StyleSheet.create({
   },
   selectCardActive: { borderColor: COLORS.red, backgroundColor: '#2A1215' },
   selectCardEmoji: { fontSize: 28, marginBottom: 8 },
-  selectCardTitle: { fontSize: 13, fontWeight: '700', color: COLORS.white, marginBottom: 4, textAlign: 'center', alignSelf: 'stretch' },
-  selectCardDesc:  { fontSize: 11, color: COLORS.gray, textAlign: 'center', lineHeight: 16, alignSelf: 'stretch' },
+  selectCardTitle: { fontSize: 12, fontWeight: '700', color: COLORS.white, marginBottom: 4, textAlign: 'center', alignSelf: 'stretch' },
+  selectCardDesc:  { fontSize: 11, color: COLORS.gray, textAlign: 'center', lineHeight: 16, alignSelf: 'stretch', marginTop: 2 },
   checkBadge: {
     position: 'absolute', top: 8, right: 8,
     width: 20, height: 20, borderRadius: 10,
