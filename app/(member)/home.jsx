@@ -7,7 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -110,6 +110,10 @@ export default function HomeScreen() {
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [announcements,     setAnnouncements]     = useState([]);
   const [viewedIds,         setViewedIds]         = useState(new Set());
+  const [showClasses,       setShowClasses]       = useState(false);
+  const [classes,           setClasses]           = useState([]);
+  const [myBookings,        setMyBookings]        = useState([]);
+  const [enrollingId,       setEnrollingId]       = useState(null);
   const [tipIndex,          setTipIndex]          = useState(0);
   const tipIndexRef = useRef(0); // keeps PanResponder in sync with current tipIndex
 
@@ -159,9 +163,71 @@ export default function HomeScreen() {
   useEffect(() => { tipIndexRef.current = tipIndex; }, [tipIndex]);
 
 
+
+  const handleEnroll = async (cls) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    if ((cls.enrolled || 0) >= cls.spots) {
+      Alert.alert('Class Full', 'This class is fully booked.');
+      return;
+    }
+    setEnrollingId(cls.id);
+    try {
+      await addDoc(collection(db, 'bookings'), {
+        classId:   cls.id,
+        className: cls.name,
+        userId:    user.uid,
+        userName:  userData?.name || 'Member',
+        createdAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, 'classes', cls.id), { enrolled: increment(1) });
+    } catch (e) { Alert.alert('Error', 'Could not enroll. Please try again.'); }
+    setEnrollingId(null);
+  };
+
+  const handleUnenroll = async (cls) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setEnrollingId(cls.id);
+    try {
+      const booking = myBookings.find(b => b.classId === cls.id);
+      if (booking) {
+        await deleteDoc(doc(db, 'bookings', booking.id));
+        await updateDoc(doc(db, 'classes', cls.id), { enrolled: increment(-1) });
+      }
+    } catch (e) { Alert.alert('Error', 'Could not unenroll. Please try again.'); }
+    setEnrollingId(null);
+  };
+
   const markViewed = (id) => {
     setViewedIds(prev => new Set([...prev, id]));
   };
+
+
+  // Live classes
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'classes'), snap => {
+      const list = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+          const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+          return days.indexOf(a.day) - days.indexOf(b.day);
+        });
+      setClasses(list);
+    }, console.error);
+    return () => unsub();
+  }, []);
+
+  // Live bookings for this user
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const q = query(collection(db, 'bookings'), where('userId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      setMyBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, console.error);
+    return () => unsub();
+  }, []);
 
   // ── Tip swipe animation ───────────────────────────────────────────────────
   const animateToTip = (nextIdx, direction) => {
@@ -362,26 +428,29 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── STREAK BANNER ── */}
-        <View style={[styles.streakBanner, streak > 0 && { borderColor: '#E6394455' }]}>
-          <Text style={{ fontSize: 34 }}>{streak > 0 ? '🔥' : '⭕'}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.streakTitle}>
-              {streak > 0 ? `${streak} Day Streak!` : 'No active streak yet'}
-            </Text>
-            <Text style={styles.streakSub}>
-              {streak > 0
-                ? 'Keep it up — train today to maintain your streak.'
-                : 'Complete your first workout to start a streak.'}
-            </Text>
-          </View>
-          {streak > 0 && (
-            <View style={{ alignItems: 'center' }}>
-              <Text style={styles.streakNum}>{streak}</Text>
-              <Text style={styles.streakNumLabel}>days</Text>
+        {/* ── CLASSES BUTTON ── */}
+        <TouchableOpacity
+          style={styles.classesBannerBtn}
+          onPress={() => setShowClasses(true)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.classesBannerLeft}>
+            <View style={styles.classesBannerIcon}>
+              <Text style={{ fontSize: 26 }}>📋</Text>
             </View>
-          )}
-        </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.classesBannerTitle}>Gym Classes</Text>
+              <Text style={styles.classesBannerSub}>
+                {classes.length > 0
+                  ? `${classes.length} class${classes.length !== 1 ? 'es' : ''} available · Tap to enroll`
+                  : 'No classes scheduled yet'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.classesBannerBadge}>
+            <Text style={styles.classesBannerBadgeText}>{classes.length}</Text>
+          </View>
+        </TouchableOpacity>
 
 
         {/* ── TRAINING LAB BUTTON ── */}
@@ -466,6 +535,86 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+      {/* ── CLASSES MODAL ── */}
+      <Modal visible={showClasses} transparent animationType="slide" onRequestClose={() => setShowClasses(false)}>
+        <View style={styles.classesModalOverlay}>
+          <View style={styles.classesModalCard}>
+            <View style={styles.classesModalHeader}>
+              <Text style={styles.classesModalTitle}>📋 Gym Classes</Text>
+              <TouchableOpacity onPress={() => setShowClasses(false)}>
+                <Ionicons name="close" size={22} color={COLORS.gray} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '85%' }}>
+              {classes.length === 0 ? (
+                <View style={{ alignItems: 'center', padding: 40, gap: 10 }}>
+                  <Text style={{ fontSize: 40 }}>📭</Text>
+                  <Text style={{ color: COLORS.white, fontSize: 16, fontWeight: '700' }}>No Classes Yet</Text>
+                  <Text style={{ color: COLORS.gray, fontSize: 13, textAlign: 'center' }}>Your coach hasn't scheduled any classes yet.</Text>
+                </View>
+              ) : classes.map(cls => {
+                const isEnrolled  = myBookings.some(b => b.classId === cls.id);
+                const isFull      = (cls.enrolled || 0) >= cls.spots;
+                const isEnrolling = enrollingId === cls.id;
+                const spotsLeft   = cls.spots - (cls.enrolled || 0);
+                const LEVEL_COLORS = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
+                const lc = LEVEL_COLORS[cls.level] || COLORS.gold;
+                return (
+                  <View key={cls.id} style={[styles.classCard, isEnrolled && { borderColor: COLORS.green + '55' }]}>
+                    <View style={styles.classCardTop}>
+                      <View style={[styles.classDayBox, { backgroundColor: lc + '22', borderColor: lc + '44' }]}>
+                        <Text style={[styles.classDayText, { color: lc }]}>{(cls.day || '').slice(0, 3).toUpperCase()}</Text>
+                        <Text style={[styles.classTimeText, { color: lc }]}>{cls.time}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.className} numberOfLines={1}>{cls.name}</Text>
+                        <View style={styles.classTagsRow}>
+                          <View style={[styles.classTag, { backgroundColor: lc + '18', borderColor: lc + '33' }]}>
+                            <Text style={[styles.classTagText, { color: lc }]}>{cls.level}</Text>
+                          </View>
+                          {cls.coach && (
+                            <View style={[styles.classTag, { backgroundColor: COLORS.inputBg, borderColor: COLORS.border }]}>
+                              <Text style={[styles.classTagText, { color: COLORS.gray }]}>🥊 {cls.coach}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      {/* Spots */}
+                      <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: isFull ? COLORS.red : COLORS.green }}>
+                          {isFull ? 'Full' : `${spotsLeft} left`}
+                        </Text>
+                        <Text style={{ fontSize: 9, color: COLORS.gray }}>{cls.enrolled || 0}/{cls.spots}</Text>
+                      </View>
+                    </View>
+
+                    {/* Enroll / Leave button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.enrollBtn,
+                        isEnrolled  ? styles.enrollBtnLeave  : styles.enrollBtnJoin,
+                        (isFull && !isEnrolled) && { opacity: 0.4 },
+                      ]}
+                      onPress={() => isEnrolled ? handleUnenroll(cls) : handleEnroll(cls)}
+                      disabled={isEnrolling || (isFull && !isEnrolled)}
+                      activeOpacity={0.85}
+                    >
+                      {isEnrolling
+                        ? <ActivityIndicator size="small" color={COLORS.white} />
+                        : <Text style={styles.enrollBtnText}>
+                            {isEnrolled ? '✓ Enrolled — Tap to Leave' : isFull ? 'Class Full' : '+ Enroll in This Class'}
+                          </Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+
     </SafeAreaView>
   );
 }
@@ -643,4 +792,40 @@ const styles = StyleSheet.create({
   announcementItemUnread: { backgroundColor: '#0A0A18' },
   unreadStripe:    { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: COLORS.red, borderRadius: 2 },
   unreadDotSmall:  { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.red },
+
+  // Classes banner button
+  classesBannerBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#0A1628', borderRadius: 18, padding: 18,
+    borderWidth: 1.5, borderColor: '#42a5f555',
+    shadowColor: '#42a5f5', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+  },
+  classesBannerLeft:   { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  classesBannerIcon:   { width: 52, height: 52, borderRadius: 14, backgroundColor: '#42a5f522', justifyContent: 'center', alignItems: 'center' },
+  classesBannerTitle:  { fontSize: 18, fontWeight: '900', color: COLORS.white },
+  classesBannerSub:    { fontSize: 12, color: COLORS.gray, marginTop: 2, flexShrink: 1 },
+  classesBannerBadge:  { width: 36, height: 36, borderRadius: 18, backgroundColor: '#42a5f5', justifyContent: 'center', alignItems: 'center' },
+  classesBannerBadgeText: { fontSize: 16, fontWeight: '900', color: '#000' },
+
+  // Classes modal
+  classesModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  classesModalCard:    { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, borderWidth: 1, borderColor: COLORS.border, maxHeight: '90%' },
+  classesModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  classesModalTitle:   { fontSize: 18, fontWeight: '900', color: COLORS.white },
+
+  // Class cards inside modal
+  classCard:    { backgroundColor: COLORS.inputBg, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 12, gap: 12 },
+  classCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  classDayBox:  { width: 56, borderRadius: 12, borderWidth: 1, padding: 8, alignItems: 'center', gap: 2 },
+  classDayText: { fontSize: 13, fontWeight: '900' },
+  classTimeText:{ fontSize: 9, fontWeight: '600' },
+  className:    { fontSize: 14, fontWeight: '800', color: COLORS.white, marginBottom: 6 },
+  classTagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  classTag:     { borderRadius: 50, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
+  classTagText: { fontSize: 9, fontWeight: '700' },
+  enrollBtn:    { borderRadius: 12, height: 46, justifyContent: 'center', alignItems: 'center' },
+  enrollBtnJoin: { backgroundColor: '#42a5f5' },
+  enrollBtnLeave:{ backgroundColor: '#1a2a1a', borderWidth: 1, borderColor: '#4ade8055' },
+  enrollBtnText: { fontSize: 13, fontWeight: '800', color: COLORS.white },
 });
