@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { signOut, deleteUser } from 'firebase/auth';
+import { doc, getDoc, updateDoc, deleteDoc, setDoc, writeBatch, getDocs, query, where, collection, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
@@ -84,6 +84,7 @@ export default function ProfileScreen() {
   const [loading,   setLoading]   = useState(true);
   const [editing,   setEditing]   = useState(false);
   const [saving,    setSaving]    = useState(false);
+  const [deleting,  setDeleting]  = useState(false);
   const [draft,     setDraft]     = useState({});
 
   // ── Load data ───────────────────────────────────────────────────────────────
@@ -181,7 +182,94 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = () => {
+  // ── Delete account ───────────────────────────────────────────────────────
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account?',
+      'This will permanently delete your account and all your data — profile, training progress, stats, and history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', style: 'destructive', onPress: confirmDelete },
+      ]
+    );
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      '⚠️ Final Warning',
+      'Are you absolutely sure? There is no way to recover your account after this.',
+      [
+        { text: 'Go Back', style: 'cancel' },
+        { text: 'Yes, Delete Everything', style: 'destructive', onPress: performDelete },
+      ]
+    );
+  };
+
+  const performDelete = async () => {
+    setDeleting(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const uid = user.uid;
+
+      // Delete main documents
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'users',    uid));
+      batch.delete(doc(db, 'workouts', uid));
+      batch.delete(doc(db, 'stats',    uid));
+      await batch.commit();
+
+      // Delete training sessions
+      try {
+        const sessSnap = await getDocs(query(collection(db, 'trainingSessions'), where('uid', '==', uid)));
+        if (!sessSnap.empty) {
+          const b = writeBatch(db); sessSnap.docs.forEach(d => b.delete(d.ref)); await b.commit();
+        }
+      } catch (_) {}
+
+      // Delete training recordings
+      try {
+        const recSnap = await getDocs(query(collection(db, 'trainingRecordings'), where('uid', '==', uid)));
+        if (!recSnap.empty) {
+          const b = writeBatch(db); recSnap.docs.forEach(d => b.delete(d.ref)); await b.commit();
+        }
+      } catch (_) {}
+
+      // Delete bookings
+      try {
+        const bookSnap = await getDocs(query(collection(db, 'bookings'), where('userId', '==', uid)));
+        if (!bookSnap.empty) {
+          const b = writeBatch(db); bookSnap.docs.forEach(d => b.delete(d.ref)); await b.commit();
+        }
+      } catch (_) {}
+
+      // Write deletion audit record
+      try {
+        await setDoc(doc(db, 'deletions', uid), {
+          uid, deletedAt: serverTimestamp(), deletedBy: 'self',
+        });
+      } catch (_) {}
+
+      // Delete Firebase Auth account (must be last)
+      await deleteUser(user);
+      router.replace('/(auth)/login');
+
+    } catch (e) {
+      setDeleting(false);
+      if (e.code === 'auth/requires-recent-login') {
+        Alert.alert(
+          'Re-login Required',
+          'For security, please log out and log back in before deleting your account.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Could not delete account. Please try again.');
+        console.error(e);
+      }
+    }
+  };
+
+    const handleLogout = () => {
     Alert.alert(
       'Log Out',
       'Are you sure you want to sign out of HitTrack?',
@@ -557,6 +645,22 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+          {/* Delete Account — centered below Edit + Logout */}
+          <TouchableOpacity
+            style={[styles.deleteAccountBtn, deleting && { opacity: 0.5 }]}
+            onPress={handleDeleteAccount}
+            disabled={deleting}
+            activeOpacity={0.7}
+          >
+            {deleting
+              ? <ActivityIndicator size="small" color={COLORS.red} />
+              : <>
+                  <Ionicons name="trash-outline" size={15} color={COLORS.red} />
+                  <Text style={styles.deleteAccountText}>Delete Account</Text>
+                </>
+            }
+          </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -742,4 +846,15 @@ const styles = StyleSheet.create({
   saveBtn:      { backgroundColor: '#16a34a' },
   logoutBtn:    { backgroundColor: COLORS.red },
   bottomBtnText:{ color: COLORS.white, fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+
+  deleteAccountBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, alignSelf: 'center',
+    paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 50, borderWidth: 1,
+    borderColor: COLORS.red + '44',
+    backgroundColor: COLORS.red + '10',
+    marginTop: 4,
+  },
+  deleteAccountText: { fontSize: 12, fontWeight: '700', color: COLORS.red },
 });
