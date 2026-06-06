@@ -124,10 +124,12 @@ export default function HomeScreen() {
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
-    getDoc(doc(db, 'users', user.uid))
-      .then((snap) => { if (snap.exists()) setUserData(snap.data()); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    // Real-time listener so coach-assigned level changes reflect instantly
+    const unsub = onSnapshot(doc(db, 'users', user.uid), snap => {
+      if (snap.exists()) setUserData(snap.data());
+      setLoading(false);
+    }, (err) => { console.error(err); setLoading(false); });
+    return () => unsub();
   }, []);
 
   // ── Load announcements (real-time) ────────────────────────────────────────
@@ -378,10 +380,12 @@ export default function HomeScreen() {
               <Text style={styles.welcomeName}>{firstName}!</Text>
             </View>
             <View style={[styles.levelBadge, {
-              backgroundColor: levelColor + '22',
-              borderColor: levelColor + '66',
+              backgroundColor: (LEVEL_COLORS[userData?.experience] || levelColor) + '22',
+              borderColor:     (LEVEL_COLORS[userData?.experience] || levelColor) + '66',
             }]}>
-              <Text style={[styles.levelBadgeText, { color: levelColor }]}>{currentLevel}</Text>
+              <Text style={[styles.levelBadgeText, { color: LEVEL_COLORS[userData?.experience] || levelColor }]}>
+                {userData?.experience || 'Beginner'}
+              </Text>
             </View>
           </View>
 

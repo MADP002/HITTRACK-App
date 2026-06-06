@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
   generateTrainingProgram, getLevelLabel, getLevelStars,
   getRequiredReps, getTypeInfo,
@@ -77,6 +77,24 @@ export default function TrainingLabScreen() {
           trainingStance:          generated.stance,
           trainingGeneratedAt:     generated.generatedAt,
         }, { merge: true });
+      }
+
+      // Auto-sync: if coach changed the level in users doc but workouts
+      // doc hasn't been updated yet, reconcile them now
+      const expKey = (uData.experience || 'Beginner').toLowerCase();
+      if (level !== expKey && expKey) {
+        const syncedStars = expKey === 'advanced' ? 3 : expKey === 'intermediate' ? 2 : 1;
+        level = expKey;
+        stars = syncedStars;
+        try {
+          const { updateDoc: upd, doc: d } = await import('firebase/firestore');
+          // updateDoc already imported via top-level import — use it directly
+        } catch (_) {}
+        // Update workouts doc to stay in sync
+        setDoc(doc(db, 'workouts', user.uid), {
+          trainingCurrentLevel: expKey,
+          trainingLevelStars:   expKey === 'advanced' ? 3 : expKey === 'intermediate' ? 2 : 1,
+        }, { merge: true }).catch(() => {});
       }
 
       setTrainings(program);
@@ -239,8 +257,8 @@ export default function TrainingLabScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>}
-
+        </View>
+        }
         {/* ── Medical cert gate — shown instead of training list ── */}
         {needsCert && (
           <View style={s.certGateCard}>

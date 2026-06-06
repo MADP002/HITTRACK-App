@@ -205,6 +205,19 @@ export default function MemberDetailScreen() {
       const me = auth.currentUser;
       await updateDoc(doc(db, 'users', uid), { experience: newLevel });
       try { await setDoc(doc(db, 'stats', uid), { experience: newLevel }, { merge: true }); } catch (_) {}
+
+      // Sync training lab level — keeps progress (current training) intact,
+      // only changes the difficulty level and star indicator
+      try {
+        const levelKey = newLevel.toLowerCase();
+        const stars    = levelKey === 'advanced' ? 3 : levelKey === 'intermediate' ? 2 : 1;
+        await updateDoc(doc(db, 'workouts', uid), {
+          trainingCurrentLevel: levelKey,
+          trainingLevelStars:   stars,
+          // trainingProgram and trainingCurrentIndex are NOT changed so
+          // the member resumes from wherever they were, just with new rep counts
+        });
+      } catch (_) {}
       await addDoc(collection(db, 'notifications'), {
         title:        `🎚 Level Updated: ${newLevel}`,
         message:      `Coach ${coachProfile.name || 'Coach'} ${LEVELS.indexOf(newLevel) > LEVELS.indexOf(oldLevel) ? 'promoted' : 'moved'} you to ${newLevel}. Your training plan and leaderboard division have been updated.`,
