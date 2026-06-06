@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, SafeAreaView, ActivityIndicator, Alert, Modal,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
@@ -35,6 +36,7 @@ function fmtRelTime(date) {
 }
 
 export default function AnnouncementsScreen() {
+  const router = useRouter();
   const [subTab,          setSubTab]         = useState('announcements');
   const [allNotifs,       setAllNotifs]      = useState([]);
   const [activity,        setActivity]       = useState([]);
@@ -169,7 +171,10 @@ export default function AnnouncementsScreen() {
       </Modal>
 
       {/* ── HEADER ── */}
-      <View style={s.header}>
+       <View style={s.header}>
+        <TouchableOpacity style={s.coachBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color={C.white} />
+        </TouchableOpacity>
         <Text style={s.headerTitle}>📢 Announcements</Text>
         <TouchableOpacity style={s.postFab} onPress={() => setShowPost(true)}>
           <Ionicons name="add" size={18} color="#000" />
@@ -442,4 +447,9 @@ const s = StyleSheet.create({
   formInput:         { backgroundColor: C.inputBg, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 12, color: C.white, fontSize: 14 },
   postBtn:           { backgroundColor: C.gold, borderRadius: 14, height: 52, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
   postBtnText:       { color: '#000', fontSize: 15, fontWeight: '800' },
-});
+ 
+  coachBackBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#2A2A2A',
+    justifyContent: 'center', alignItems: 'center',
+  },});

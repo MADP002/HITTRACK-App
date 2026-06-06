@@ -70,7 +70,10 @@ export default function ClientsScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color={COLORS.white} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>👥 Clients</Text>
           <Text style={styles.headerSub}>Welcome, {coachProfile.name}</Text>
         </View>
@@ -244,4 +247,9 @@ const styles = StyleSheet.create({
   statItem:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
   statVal:   { fontSize: 12, fontWeight: '800' },
   statIcon:  { fontSize: 11 },
-});
+
+  coachBackBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#2A2A2A',
+    justifyContent: 'center', alignItems: 'center',
+  },});

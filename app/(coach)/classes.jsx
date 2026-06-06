@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Alert,
   Modal, RefreshControl,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
@@ -27,6 +28,7 @@ const LEVELS = ['Beginner','Intermediate','Advanced'];
 const SPOTS  = ['6','8','10','12','15','20','25','30'];
 
 export default function ClassesScreen() {
+  const router = useRouter();
   const [classes,      setClasses]      = useState([]);
   const [bookings,     setBookings]     = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -222,8 +224,11 @@ export default function ClassesScreen() {
       </Modal>
 
       {/* Header */}
-      <View style={styles.header}>
-        <View>
+     <View style={styles.header}>
+        <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color={COLORS.white} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>📋 Classes</Text>
           <Text style={styles.headerSub}>{activeClasses.length} active class{activeClasses.length !== 1 ? 'es' : ''}</Text>
         </View>
@@ -468,4 +473,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
   },
   createBtnText: { color: COLORS.white, fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
-});
+  
+  coachBackBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#2A2A2A',
+    justifyContent: 'center', alignItems: 'center',
+  },});
