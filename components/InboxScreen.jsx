@@ -7,7 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
 import {
-  collection, query, where, onSnapshot, addDoc,
+  collection, query, where, orderBy, limit, onSnapshot, addDoc,
   getDocs, serverTimestamp, doc, deleteDoc, getDoc,
 } from 'firebase/firestore';
 
@@ -63,6 +63,12 @@ export default function InboxScreen() {
   const [showCompose,   setShowCompose]   = useState(false);
   const [composeSearch, setComposeSearch] = useState('');
   const [msgText,       setMsgText]       = useState('');
+  const [showForum,     setShowForum]     = useState(false);
+  const [forumMessages, setForumMessages] = useState([]);
+  const [forumText,     setForumText]     = useState('');
+  const [sendingForum,  setSendingForum]  = useState(false);
+  const forumLastViewedRef = useRef(0);
+  const forumScrollRef     = useRef(null);
   const [sending,       setSending]       = useState(false);
   const scrollRef = useRef(null);
 
@@ -112,12 +118,51 @@ export default function InboxScreen() {
     }).catch(console.error);
   }, [currentUid]);
 
+
+  // Forum group chat — real-time listener for groupMessages
+  useEffect(() => {
+    const q = query(collection(db, 'groupMessages'), orderBy('createdAt', 'asc'), limit(200));
+    const unsub = onSnapshot(q, snap => {
+      setForumMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, console.error);
+    return () => unsub();
+  }, []);
+
+  // Scroll Forum to bottom when opened or new message arrives
+  useEffect(() => {
+    if (showForum) {
+      setTimeout(() => forumScrollRef.current?.scrollToEnd({ animated: true }), 150);
+    }
+  }, [showForum, forumMessages.length]);
+
   // Scroll to bottom when thread opens or new message arrives
   useEffect(() => {
     if (showThread) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [showThread, messages.length]);
+
+  // Forum helpers
+  const openForum = () => {
+    forumLastViewedRef.current = Math.floor(Date.now() / 1000);
+    setShowForum(true);
+  };
+
+  const sendForumMessage = async () => {
+    if (!forumText.trim() || sendingForum) return;
+    setSendingForum(true);
+    try {
+      await addDoc(collection(db, 'groupMessages'), {
+        from:     currentUid,
+        fromName: profile.name  || 'User',
+        fromRole: profile.role  || 'member',
+        text:     forumText.trim(),
+        createdAt: serverTimestamp(),
+      });
+      setForumText('');
+    } catch (e) { console.error('Forum send error:', e); }
+    setSendingForum(false);
+  };
 
   // Open a conversation + mark as read
   const openConversation = useCallback((uid) => {
@@ -158,6 +203,13 @@ export default function InboxScreen() {
   }, [messages, users, currentUid, readMap]);
 
   const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
+
+  // Forum unread = messages from others since last viewed
+  const forumUnread = forumMessages.filter(m =>
+    m.from !== currentUid &&
+    (m.createdAt?.seconds || 0) > forumLastViewedRef.current
+  ).length;
+  const lastForumMsg = forumMessages[forumMessages.length - 1];
 
   // Active conversation — real or placeholder for new conversation
   const activeConv = useMemo(() => {
@@ -330,6 +382,120 @@ export default function InboxScreen() {
         </SafeAreaView>
       </Modal>
 
+
+      {/* ══════════════════════════════════════════════════════
+           FORUM GROUP CHAT MODAL
+      ══════════════════════════════════════════════════════ */}
+      <Modal visible={showForum} animationType="slide" onRequestClose={() => setShowForum(false)}>
+        <SafeAreaView style={s.safe}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            {/* Header */}
+            <View style={s.forumHeader}>
+              <TouchableOpacity style={s.iconBtn} onPress={() => setShowForum(false)}>
+                <Ionicons name="arrow-back" size={20} color={C.white} />
+              </TouchableOpacity>
+              <View style={s.forumHeaderInfo}>
+                <Text style={s.forumHeaderTitle}>🌐 Forum</Text>
+                <Text style={s.forumHeaderSub}>All members · coaches · admins</Text>
+              </View>
+              <View style={[s.forumHeaderBadge]}>
+                <Text style={s.forumHeaderBadgeText}>{forumMessages.length}</Text>
+              </View>
+            </View>
+
+            {/* Messages */}
+            <ScrollView
+              ref={forumScrollRef}
+              contentContainerStyle={s.threadScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {forumMessages.length === 0 ? (
+                <View style={s.emptyThread}>
+                  <Text style={{ fontSize: 48 }}>🌐</Text>
+                  <Text style={s.emptyThreadTitle}>Forum is Empty</Text>
+                  <Text style={s.emptyThreadSub}>Be the first to say something!</Text>
+                </View>
+              ) : (
+                forumMessages.map((m, i, arr) => {
+                  const isMe     = m.from === currentUid;
+                  const prev     = arr[i - 1];
+                  const sameAsPrev = prev && prev.from === m.from;
+                  const rc = ROLE_COLOR[m.fromRole] || C.gold;
+                  const showDate = !prev || fmtMsgDate(prev.createdAt) !== fmtMsgDate(m.createdAt);
+                  return (
+                    <View key={m.id || i}>
+                      {showDate && (
+                        <View style={s.dateSep}>
+                          <Text style={s.dateSepText}>— {fmtMsgDate(m.createdAt)} —</Text>
+                        </View>
+                      )}
+                      {/* Show sender name for others (not consecutive) */}
+                      {!isMe && !sameAsPrev && (
+                        <View style={s.forumSenderRow}>
+                          <View style={[s.forumSenderAvatar, { backgroundColor: rc + '22', borderColor: rc + '55' }]}>
+                            <Text style={[{ fontSize: 9, fontWeight: '900', color: rc }]}>
+                              {(m.fromName || '?')[0].toUpperCase()}
+                            </Text>
+                          </View>
+                          <Text style={[s.forumSenderName, { color: rc }]}>
+                            {m.fromName}
+                          </Text>
+                          <View style={[s.forumRolePill, { backgroundColor: rc + '18', borderColor: rc + '33' }]}>
+                            <Text style={[s.forumRolePillText, { color: rc }]}>
+                              {ROLE_LABEL[m.fromRole] || 'User'}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      <View style={[s.msgRow, { justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: sameAsPrev ? 2 : 6 }]}>
+                        {!isMe && <View style={{ width: 24 }} />}
+                        <View style={{ maxWidth: '80%', gap: 3 }}>
+                          <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+                            <Text style={s.bubbleText}>{m.text}</Text>
+                          </View>
+                          <View style={[s.msgMeta, { justifyContent: isMe ? 'flex-end' : 'flex-start' }]}>
+                            <Text style={s.msgMetaTime}>{fmtMsgTime(m.createdAt)}</Text>
+                            {isMe && (
+                              <TouchableOpacity onPress={() => deleteDoc(doc(db, 'groupMessages', m.id)).catch(console.error)} style={{ padding: 2 }}>
+                                <Ionicons name="trash-outline" size={11} color={C.gray} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {/* Input */}
+            <View style={s.inputBar}>
+              <TextInput
+                style={s.textInput}
+                value={forumText}
+                onChangeText={setForumText}
+                placeholder="Message everyone…"
+                placeholderTextColor={C.gray}
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={[s.sendBtn, { backgroundColor: '#6366f1' }, (!forumText.trim() || sendingForum) && { opacity: 0.35 }]}
+                onPress={sendForumMessage}
+                disabled={!forumText.trim() || sendingForum}
+              >
+                {sendingForum
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="send" size={18} color="#fff" />
+                }
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
       {/* ══════════════════════════════════════════════════════════
            COMPOSE MODAL
       ══════════════════════════════════════════════════════════ */}
@@ -445,6 +611,50 @@ export default function InboxScreen() {
             </TouchableOpacity>
           )}
         </View>
+      </View>
+
+
+      {/* ══════════════════════════════════════════════════════
+           FORUM GROUP CHAT CARD (pinned above DMs)
+      ══════════════════════════════════════════════════════ */}
+      <TouchableOpacity style={s.forumCard} onPress={openForum} activeOpacity={0.85}>
+        <View style={s.forumCardAccent} />
+        <View style={s.forumCardLeft}>
+          <View style={s.forumCardIconWrap}>
+            <Text style={{ fontSize: 22 }}>🌐</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={s.forumCardTitleRow}>
+              <Text style={s.forumCardTitle}>Forum</Text>
+              <View style={s.forumCardAllBadge}>
+                <Text style={s.forumCardAllBadgeText}>Everyone</Text>
+              </View>
+            </View>
+            <Text style={s.forumCardPreview} numberOfLines={1}>
+              {lastForumMsg
+                ? (lastForumMsg.from === currentUid ? 'You: ' : `${lastForumMsg.fromName?.split(' ')[0]}: `) + lastForumMsg.text
+                : 'Tap to join the conversation'
+              }
+            </Text>
+          </View>
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          {forumUnread > 0 && (
+            <View style={s.forumUnreadBadge}>
+              <Text style={s.forumUnreadBadgeText}>{forumUnread}</Text>
+            </View>
+          )}
+          {lastForumMsg?.createdAt && (
+            <Text style={s.convTime}>{fmtConvTime(lastForumMsg.createdAt)}</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+
+      {/* Divider between Forum and DMs */}
+      <View style={s.forumDivider}>
+        <View style={s.dividerLine2} />
+        <Text style={s.dividerLabel2}>DIRECT MESSAGES</Text>
+        <View style={s.dividerLine2} />
       </View>
 
       {/* List */}
@@ -595,4 +805,43 @@ const s = StyleSheet.create({
   composeAvatarText: { fontSize: 16, fontWeight: '900' },
   composeUserName:   { fontSize: 14, fontWeight: '700', color: C.white },
   composeUserRole:   { fontSize: 11, fontWeight: '600', marginTop: 2 },
+
+  // Forum card
+  forumCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, marginBottom: 4,
+    backgroundColor: '#0D0D1F', borderRadius: 18,
+    borderWidth: 1.5, borderColor: '#6366f155',
+    padding: 16, overflow: 'hidden',
+  },
+  forumCardAccent:    { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: '#6366f1', borderRadius: 2 },
+  forumCardLeft:      { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  forumCardIconWrap:  { width: 46, height: 46, borderRadius: 23, backgroundColor: '#6366f122', borderWidth: 1.5, borderColor: '#6366f155', justifyContent: 'center', alignItems: 'center' },
+  forumCardTitleRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  forumCardTitle:     { fontSize: 16, fontWeight: '900', color: '#ffffff' },
+  forumCardAllBadge:  { backgroundColor: '#6366f122', borderRadius: 50, borderWidth: 1, borderColor: '#6366f155', paddingHorizontal: 8, paddingVertical: 2 },
+  forumCardAllBadgeText: { fontSize: 9, fontWeight: '700', color: '#a5b4fc' },
+  forumCardPreview:   { fontSize: 12, color: '#888888' },
+  forumUnreadBadge:   { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#6366f1', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  forumUnreadBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+
+  // Forum divider
+  forumDivider:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 4, marginTop: 8 },
+  dividerLine2:  { flex: 1, height: 1, backgroundColor: '#2A2A2A' },
+  dividerLabel2: { fontSize: 9, color: '#555', fontWeight: '700', letterSpacing: 0.8 },
+
+  // Forum thread header
+  forumHeader:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
+  forumHeaderInfo:  { flex: 1 },
+  forumHeaderTitle: { fontSize: 16, fontWeight: '900', color: '#ffffff' },
+  forumHeaderSub:   { fontSize: 10, color: '#888888', marginTop: 1 },
+  forumHeaderBadge: { backgroundColor: '#6366f122', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#6366f155' },
+  forumHeaderBadgeText: { fontSize: 11, fontWeight: '700', color: '#a5b4fc' },
+
+  // Forum sender row
+  forumSenderRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 24, marginTop: 8, marginBottom: 2 },
+  forumSenderAvatar:{ width: 18, height: 18, borderRadius: 9, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  forumSenderName:  { fontSize: 11, fontWeight: '700' },
+  forumRolePill:    { borderRadius: 50, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1 },
+  forumRolePillText:{ fontSize: 8, fontWeight: '700' },
 });
