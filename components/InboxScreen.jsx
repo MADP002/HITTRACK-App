@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, ActivityIndicator, Modal,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
 import {
@@ -52,6 +53,7 @@ function fmtMsgDate(ts) {
 // ── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function InboxScreen() {
   const currentUid = auth.currentUser?.uid;
+   const router = useRouter();
 
   const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
   const [messages,      setMessages]      = useState([]);
@@ -578,6 +580,9 @@ export default function InboxScreen() {
 
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity style={s.inboxBackBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color={C.white} />
+        </TouchableOpacity>
         <View style={s.headerLeft}>
           <Text style={s.headerTitle}>💬 Inbox</Text>
           {totalUnread > 0 && (
@@ -844,4 +849,10 @@ const s = StyleSheet.create({
   forumSenderName:  { fontSize: 11, fontWeight: '700' },
   forumRolePill:    { borderRadius: 50, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1 },
   forumRolePillText:{ fontSize: 8, fontWeight: '700' },
-});
+
+  inboxBackBtn: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 4,
+  },});
