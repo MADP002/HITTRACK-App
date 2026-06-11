@@ -134,7 +134,7 @@ export default function TrainingLabScreen() {
     <SafeAreaView style={s.safe}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.replace('/(member)/home')}>
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>🥊 Training Lab</Text>
@@ -257,8 +257,8 @@ export default function TrainingLabScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
-        }
+        </View>}
+
         {/* ── Medical cert gate — shown instead of training list ── */}
         {needsCert && (
           <View style={s.certGateCard}>

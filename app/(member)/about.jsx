@@ -53,7 +53,7 @@ const OFFERINGS = [
 
 const CONTACT = [
   { icon: '📍', label: 'Location', val: 'Wild Bout Boxing Gym, Metro Manila, Philippines' },
-  { icon: '📞', label: 'Phone',    val: '+63 927 365 9145' },
+  { icon: '📞', label: 'Phone',    val: '+63 900 000 0000' },
   { icon: '📧', label: 'Email',    val: 'wildbout@boxing.ph' },
   { icon: '🕐', label: 'Hours',   val: 'Mon–Sat: 6:00 AM – 9:00 PM' },
 ];
@@ -75,7 +75,7 @@ export default function AboutUsScreen() {
     <SafeAreaView style={s.safe}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.replace('/(member)/home')}>
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>About Us</Text>

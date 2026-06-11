@@ -55,7 +55,7 @@ export default function InboxScreen() {
   const currentUid = auth.currentUser?.uid;
    const router = useRouter();
 
-  const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
+   const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
   const [messages,      setMessages]      = useState([]);
   const [users,         setUsers]         = useState([]);
   const [readMap,       setReadMap]       = useState({});  // uid → last-read ts (seconds)
@@ -81,7 +81,7 @@ export default function InboxScreen() {
       .then(s => { if (s.exists()) setProfile(s.data()); })
       .catch(console.error);
   }, [currentUid]);
-
+ 
   // Real-time messages (no orderBy — avoids composite index requirement, sort client-side)
   useEffect(() => {
     if (!currentUid) return;
@@ -98,7 +98,7 @@ export default function InboxScreen() {
     }, console.error);
     return () => unsub();
   }, [currentUid]);
-
+ 
   // Load all other users (for compose + name/role lookup)
   useEffect(() => {
     if (!currentUid) return;
@@ -119,8 +119,7 @@ export default function InboxScreen() {
       setUsers(list);
     }).catch(console.error);
   }, [currentUid]);
-
-
+ 
   // Forum group chat — real-time listener for groupMessages
   useEffect(() => {
     const q = query(collection(db, 'groupMessages'), orderBy('createdAt', 'asc'), limit(200));
@@ -129,27 +128,33 @@ export default function InboxScreen() {
     }, console.error);
     return () => unsub();
   }, []);
-
+ 
   // Scroll Forum to bottom when opened or new message arrives
   useEffect(() => {
     if (showForum) {
       setTimeout(() => forumScrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [showForum, forumMessages.length]);
-
+ 
   // Scroll to bottom when thread opens or new message arrives
   useEffect(() => {
     if (showThread) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [showThread, messages.length]);
-
+ 
   // Forum helpers
+  const handleBack = () => {
+    if (profile.role === 'coach') router.replace('/(coach)/home');
+    else if (profile.role === 'admin') router.replace('/(admin)/overview');
+    else router.replace('/(member)/home');
+  };
+
   const openForum = () => {
     forumLastViewedRef.current = Math.floor(Date.now() / 1000);
     setShowForum(true);
   };
-
+ 
   const sendForumMessage = async () => {
     if (!forumText.trim() || sendingForum) return;
     setSendingForum(true);
@@ -165,7 +170,7 @@ export default function InboxScreen() {
     } catch (e) { console.error('Forum send error:', e); }
     setSendingForum(false);
   };
-
+ 
   // Open a conversation + mark as read
   const openConversation = useCallback((uid) => {
     setActiveUid(uid);
@@ -173,7 +178,7 @@ export default function InboxScreen() {
     setMsgText('');
     setShowThread(true);
   }, []);
-
+  
   // Group messages → conversations (same logic as web InboxView)
   const conversations = useMemo(() => {
     const map = {};
@@ -203,7 +208,7 @@ export default function InboxScreen() {
     }
     return Object.values(map).sort((a, b) => b.lastTs - a.lastTs);
   }, [messages, users, currentUid, readMap]);
-
+ 
   const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
 
   // Forum unread = messages from others since last viewed
@@ -222,12 +227,12 @@ export default function InboxScreen() {
     if (user) return { uid: user.uid, name: user.name, role: user.role, messages: [], lastMsg: null, lastTs: 0, unread: 0 };
     return null;
   }, [activeUid, conversations, users]);
-
+ 
   // Filtered conversation list (search)
   const filteredConvs = conversations.filter(c =>
     !searchQ || c.name.toLowerCase().includes(searchQ.toLowerCase())
   );
-
+ 
   // Compose: sorted by role (admin → coach → member), then name
   const composeFiltered = users
     .filter(u => !composeSearch || u.name.toLowerCase().includes(composeSearch.toLowerCase()))
@@ -236,8 +241,8 @@ export default function InboxScreen() {
       const o = (order[a.role] ?? 3) - (order[b.role] ?? 3);
       return o !== 0 ? o : a.name.localeCompare(b.name);
     });
-
-  // Send message
+ 
+    // Send message
   const sendMessage = async () => {
     if (!msgText.trim() || !activeUid || sending) return;
     setSending(true);
@@ -258,7 +263,7 @@ export default function InboxScreen() {
     } catch (e) { console.error('Send error:', e); }
     setSending(false);
   };
-
+ 
   // Delete own message
   const deleteMessage = async (msgId) => {
     try { await deleteDoc(doc(db, 'messages', msgId)); }
@@ -266,17 +271,17 @@ export default function InboxScreen() {
   };
 
   const myRoleColor = ROLE_COLOR[profile.role] || C.gold;
-
+ 
   return (
     <SafeAreaView style={s.safe}>
-
+ 
       {/* ══════════════════════════════════════════════════════════
            THREAD MODAL
       ══════════════════════════════════════════════════════════ */}
       <Modal visible={showThread} animationType="slide" onRequestClose={() => setShowThread(false)}>
         <SafeAreaView style={s.safe}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
-
+  
             {/* Header */}
             {activeConv && (() => {
               const rc = ROLE_COLOR[activeConv.role] || C.gold;
@@ -297,7 +302,7 @@ export default function InboxScreen() {
                 </View>
               );
             })()}
-
+   
             {/* Messages */}
             <ScrollView
               ref={scrollRef}
@@ -356,7 +361,7 @@ export default function InboxScreen() {
                 })
               )}
             </ScrollView>
-
+  
             {/* Input bar */}
             <View style={s.inputBar}>
               <TextInput
@@ -383,8 +388,7 @@ export default function InboxScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
-
-
+ 
       {/* ══════════════════════════════════════════════════════
            FORUM GROUP CHAT MODAL
       ══════════════════════════════════════════════════════ */}
@@ -404,7 +408,7 @@ export default function InboxScreen() {
                 <Text style={s.forumHeaderBadgeText}>{forumMessages.length}</Text>
               </View>
             </View>
-
+  
             {/* Messages */}
             <ScrollView
               ref={forumScrollRef}
@@ -471,7 +475,7 @@ export default function InboxScreen() {
                 })
               )}
             </ScrollView>
-
+   
             {/* Input */}
             <View style={s.inputBar}>
               <TextInput
@@ -497,7 +501,7 @@ export default function InboxScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
-
+  
       {/* ══════════════════════════════════════════════════════════
            COMPOSE MODAL
       ══════════════════════════════════════════════════════════ */}
@@ -536,7 +540,7 @@ export default function InboxScreen() {
           <Text style={s.composeMeta}>
             {composeFiltered.length} {composeFiltered.length === 1 ? 'person' : 'people'} available
           </Text>
-
+ 
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
             {composeFiltered.length === 0 ? (
               <Text style={[s.composeMeta, { textAlign: 'center', paddingTop: 40 }]}>No results for "{composeSearch}"</Text>
@@ -574,13 +578,14 @@ export default function InboxScreen() {
         </SafeAreaView>
       </Modal>
 
+
       {/* ══════════════════════════════════════════════════════════
            CONVERSATION LIST
       ══════════════════════════════════════════════════════════ */}
 
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.inboxBackBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.inboxBackBtn} onPress={handleBack}>
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <View style={s.headerLeft}>
@@ -596,7 +601,7 @@ export default function InboxScreen() {
           <Text style={s.newBtnText}>New</Text>
         </TouchableOpacity>
       </View>
-
+ 
       {/* Search */}
       <View style={s.searchWrap}>
         <View style={s.searchBox}>
@@ -617,6 +622,7 @@ export default function InboxScreen() {
           )}
         </View>
       </View>
+
 
 
       {/* ══════════════════════════════════════════════════════
@@ -661,7 +667,7 @@ export default function InboxScreen() {
         <Text style={s.dividerLabel2}>DIRECT MESSAGES</Text>
         <View style={s.dividerLine2} />
       </View>
-
+ 
       {/* List */}
       <ScrollView contentContainerStyle={s.listScroll} showsVerticalScrollIndicator={false}>
         {filteredConvs.length === 0 ? (
@@ -734,7 +740,7 @@ export default function InboxScreen() {
 // ── STYLES ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-
+ 
   // Conversation list header
   header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -743,12 +749,12 @@ const s = StyleSheet.create({
   totalUnreadText:  { fontSize: 11, fontWeight: '800', color: C.white },
   newBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 50, paddingHorizontal: 14, paddingVertical: 8 },
   newBtnText: { fontSize: 12, fontWeight: '800', color: '#000' },
-
+  
   // Search
   searchWrap: { paddingHorizontal: 16, paddingVertical: 10 },
   searchBox:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 46 },
   searchInput:{ flex: 1, color: C.white, fontSize: 14 },
-
+  
   // Conversation rows
   listScroll: { paddingBottom: 40 },
   convRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, position: 'relative' },
@@ -764,12 +770,12 @@ const s = StyleSheet.create({
   rolePill:   { borderRadius: 50, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1, alignSelf: 'flex-start' },
   rolePillText:{ fontSize: 9, fontWeight: '700' },
   convPreview:{ fontSize: 12, color: C.gray },
-
+  
   // Empty states
   emptyBox:  { alignItems: 'center', gap: 14, paddingTop: 80 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: C.white },
   emptySub:  { fontSize: 13, color: C.gray, textAlign: 'center', paddingHorizontal: 30 },
-
+  
   // Thread header
   threadHeader:{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   iconBtn:     { width: 38, height: 38, borderRadius: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center' },
@@ -777,7 +783,7 @@ const s = StyleSheet.create({
   tAvatarText: { fontSize: 16, fontWeight: '900' },
   tName:       { fontSize: 15, fontWeight: '800', color: C.white },
   tRole:       { fontSize: 10, fontWeight: '600', marginTop: 2 },
-
+  
   // Thread messages
   threadScroll: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, flexGrow: 1 },
   emptyThread:  { alignItems: 'center', gap: 10, paddingTop: 80 },
@@ -793,7 +799,7 @@ const s = StyleSheet.create({
   bubbleText:{ fontSize: 14, color: C.white, lineHeight: 20 },
   msgMeta:  { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
   msgMetaTime: { fontSize: 9, color: C.gray },
-
+  
   // Input bar
   inputBar: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border },
   textInput:{ flex: 1, backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 10, color: C.white, fontSize: 14, maxHeight: 120 },
@@ -810,7 +816,7 @@ const s = StyleSheet.create({
   composeAvatarText: { fontSize: 16, fontWeight: '900' },
   composeUserName:   { fontSize: 14, fontWeight: '700', color: C.white },
   composeUserRole:   { fontSize: 11, fontWeight: '600', marginTop: 2 },
-
+ 
   // Forum card
   forumCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -829,12 +835,12 @@ const s = StyleSheet.create({
   forumCardPreview:   { fontSize: 12, color: '#888888' },
   forumUnreadBadge:   { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#6366f1', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
   forumUnreadBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
-
+  
   // Forum divider
   forumDivider:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 4, marginTop: 8 },
   dividerLine2:  { flex: 1, height: 1, backgroundColor: '#2A2A2A' },
   dividerLabel2: { fontSize: 9, color: '#555', fontWeight: '700', letterSpacing: 0.8 },
-
+ 
   // Forum thread header
   forumHeader:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
   forumHeaderInfo:  { flex: 1 },
@@ -842,14 +848,14 @@ const s = StyleSheet.create({
   forumHeaderSub:   { fontSize: 10, color: '#888888', marginTop: 1 },
   forumHeaderBadge: { backgroundColor: '#6366f122', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#6366f155' },
   forumHeaderBadgeText: { fontSize: 11, fontWeight: '700', color: '#a5b4fc' },
-
+ 
   // Forum sender row
   forumSenderRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 24, marginTop: 8, marginBottom: 2 },
   forumSenderAvatar:{ width: 18, height: 18, borderRadius: 9, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   forumSenderName:  { fontSize: 11, fontWeight: '700' },
   forumRolePill:    { borderRadius: 50, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1 },
   forumRolePillText:{ fontSize: 8, fontWeight: '700' },
-
+  
   inboxBackBtn: {
     width: 38, height: 38, borderRadius: 10,
     backgroundColor: C.card, borderWidth: 1, borderColor: C.border,

@@ -7,8 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
-  doc, getDoc, updateDoc, addDoc, collection, getDocs,
-  serverTimestamp,
+  doc, getDoc, updateDoc, setDoc, addDoc, collection, getDocs,
+  query, where, serverTimestamp,
 } from 'firebase/firestore';
 import { getLevelLabel, getNextLevel, getLevelStars } from '../../lib/trainingPrograms';
 
@@ -81,22 +81,68 @@ async function completeTraining({ uid, trainingId, level, properReps, duration }
       completedAt: serverTimestamp(),
     });
 
-    // Update stats
-    const statsRef  = doc(db, 'stats', uid);
-    const statsSnap = await getDoc(statsRef);
-    const stats     = statsSnap.exists() ? statsSnap.data() : {};
-    await updateDoc(statsRef, {
-      totalTrainingSessions: (stats.totalTrainingSessions || 0) + 1,
-      totalProperReps:       (stats.totalProperReps       || 0) + (properReps || 0),
-      trainingLevel:         nextLevel,
-      lastTrainedAt:         serverTimestamp(),
-    }).catch(() =>
-      // If stats doc doesn't exist yet, create it
-      addDoc(collection(db, 'stats'), {
-        uid, totalTrainingSessions: 1, totalProperReps: properReps || 0,
-        trainingLevel: nextLevel, lastTrainedAt: serverTimestamp(),
-      })
-    );
+    // ── Calculate real stats ─────────────────────────────────────
+    // Load current user data for streak + weekly progress
+    const userSnap2   = await getDoc(doc(db, 'users', uid));
+    const uData2      = userSnap2.exists() ? userSnap2.data() : {};
+    const curStreak   = uData2.streak || 0;
+    const lastTrained = uData2.lastTrainedAt;
+    const daysPerWeek = uData2.daysPerWeek || 3;
+    const newTotal    = (uData2.totalWorkouts || 0) + 1;
+
+    // Streak: same day = keep, yesterday = +1, else = reset to 1
+    const today = new Date(); today.setHours(0,0,0,0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    let newStreak = 1;
+    if (lastTrained?.seconds) {
+      const lastDate = new Date(lastTrained.seconds * 1000);
+      lastDate.setHours(0,0,0,0);
+      if (lastDate.getTime() === today.getTime())     newStreak = curStreak;       // already trained today
+      else if (lastDate.getTime() === yesterday.getTime()) newStreak = curStreak + 1; // consecutive day
+      // else newStreak = 1 — missed a day, reset
+    }
+
+    // Weekly progress: count unique days trained this week (Mon–Sun)
+    const monday = new Date(today);
+    const dow = monday.getDay();
+    monday.setDate(monday.getDate() - (dow === 0 ? 6 : dow - 1));
+    let weekDays = new Set([today.toDateString()]); // include today
+    try {
+      const weekSnap = await getDocs(
+        query(collection(db, 'trainingSessions'), where('uid', '==', uid))
+      );
+      weekSnap.docs.forEach(d => {
+        const ts = d.data().completedAt?.seconds;
+        if (!ts) return;
+        const dt = new Date(ts * 1000);
+        if (dt >= monday) { dt.setHours(0,0,0,0); weekDays.add(dt.toDateString()); }
+      });
+    } catch (_) {}
+    const weeklyPct = Math.min(Math.round((weekDays.size / Math.max(daysPerWeek, 1)) * 100), 100);
+
+    // Update users/{uid} — home screen reads from here
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        totalWorkouts: newTotal,
+        streak:        newStreak,
+        weeklyPct,
+        lastTrainedAt: serverTimestamp(),
+      });
+    } catch (_) {}
+
+    // Update stats/{uid} — leaderboard + achievements read from here
+    try {
+      await setDoc(doc(db, 'stats', uid), {
+        uid,
+        totalWorkouts:         newTotal,
+        totalTrainingSessions: (uData2.totalTrainingSessions || 0) + 1,
+        totalProperReps:       (uData2.totalProperReps || 0) + (properReps || 0),
+        streak:                newStreak,
+        weeklyPct,
+        trainingLevel:         nextLevel,
+        lastTrainedAt:         serverTimestamp(),
+      }, { merge: true });
+    } catch (_) {}
 
     return { leveledUp, nextLevel };
   } catch (e) {
