@@ -12,6 +12,11 @@ import {
 } from 'firebase/firestore';
 import { getLevelLabel, getNextLevel, getLevelStars } from '../../lib/trainingPrograms';
 
+// ── Cloudinary config — fill these in from your Cloudinary dashboard ──────
+// Dashboard → Settings → Upload → Upload Presets (create one as Unsigned)
+const CLOUDINARY_CLOUD_NAME   = 'dthdcmisj';    // e.g. 'hittrack'
+const CLOUDINARY_UPLOAD_PRESET = 'hittrack_videos'; // e.g. 'hittrack_videos'
+
 const C = {
   bg: '#000000', card: '#111111', border: '#1E1E1E',
   red: '#E63946', white: '#FFFFFF', gray: '#888888',
@@ -221,12 +226,36 @@ export default function TrainingCompleteScreen() {
     }
     setUploading(true);
     try {
-      const user     = auth.currentUser;
-      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const user       = auth.currentUser;
+      const userSnap   = await getDoc(doc(db, 'users', user.uid));
       const memberName = userSnap.exists() ? userSnap.data().name : 'Member';
 
-      // Save session report to Firestore — no video file needed
-      // (Firebase Storage requires paid plan; video upload will be added later)
+      let recordingUrl = null;
+
+      // Upload video to Cloudinary if a recording exists
+      if (hasRecording && CLOUDINARY_CLOUD_NAME !== 'YOUR_CLOUD_NAME') {
+        try {
+          const formData = new FormData();
+          formData.append('file', {
+            uri:  recordingUri,
+            type: 'video/mp4',
+            name: `training_${trainingId}_${Date.now()}.mp4`,
+          });
+          formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+          formData.append('folder', `hittrack/${user.uid}`);
+
+          const cloudRes = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,
+            { method: 'POST', body: formData }
+          );
+          const cloudData = await cloudRes.json();
+          recordingUrl = cloudData.secure_url || null;
+        } catch (uploadErr) {
+          console.warn('Cloudinary upload failed, saving session without video:', uploadErr);
+        }
+      }
+
+      // Save session report to Firestore
       await addDoc(collection(db, 'trainingRecordings'), {
         uid:          user.uid,
         memberName,
@@ -237,7 +266,7 @@ export default function TrainingCompleteScreen() {
         level,
         properReps,
         duration,
-        recordingUrl: null,   // video upload not yet available on free plan
+        recordingUrl,
         submittedAt:  serverTimestamp(),
         viewed:       false,
       });
@@ -313,10 +342,12 @@ export default function TrainingCompleteScreen() {
           {!submitted ? (
             <View style={s.recordingCard}>
               <Text style={s.recordingTitle}>
-                {'📋 Submit Session Report to Coach'}
+                {hasRecording && CLOUDINARY_CLOUD_NAME !== 'YOUR_CLOUD_NAME' ? '📹 Submit Recording to Coach' : '📋 Submit Session Report'}
               </Text>
               <Text style={s.recordingBody}>
-                {'Send your session stats to a coach — they will see your rep count, level, and duration.'
+                {hasRecording && CLOUDINARY_CLOUD_NAME !== 'YOUR_CLOUD_NAME'
+                  ? 'Your training video will be uploaded to Cloudinary and sent to your coach.'
+                  : 'Your session stats (reps, level, duration) will be sent to your coach.'
                 }
               </Text>
 
@@ -344,7 +375,7 @@ export default function TrainingCompleteScreen() {
                   : <>
                       <Ionicons name="send-outline" size={18} color={C.white} />
                       <Text style={s.submitRecordingBtnText}>
-                        {'Send Session Report'}
+                        {hasRecording && CLOUDINARY_CLOUD_NAME !== 'YOUR_CLOUD_NAME' ? 'Submit Recording' : 'Send Session Report'}
                       </Text>
                     </>
                 }

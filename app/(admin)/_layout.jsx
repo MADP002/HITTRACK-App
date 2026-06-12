@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db, auth } from '../../firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const RED = '#E63946';
 
 export default function AdminLayout() {
+  const insets = useSafeAreaInsets();
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -23,7 +25,14 @@ export default function AdminLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#111111', borderTopColor: '#1E1E1E', borderTopWidth: 1, height: 68, paddingBottom: 12, paddingTop: 8 },
+        tabBarStyle: {
+          backgroundColor: '#111111',
+          borderTopColor: '#1E1E1E',
+          borderTopWidth: 1,
+          height: 68 + insets.bottom,
+          paddingBottom: 12 + insets.bottom,
+          paddingTop: 8,
+        },
         tabBarActiveTintColor: RED,
         tabBarInactiveTintColor: '#444444',
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },

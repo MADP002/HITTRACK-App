@@ -1,9 +1,8 @@
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
-
 const BLUE = '#42a5f5';
-
 export default function CoachLayout() {
   return (
     <Tabs
@@ -13,8 +12,8 @@ export default function CoachLayout() {
           backgroundColor: '#111111',
           borderTopColor: '#1E1E1E',
           borderTopWidth: 1,
-          height: 68,
-          paddingBottom: 12,
+          height: 68 + insets.bottom,
+          paddingBottom: 12 + insets.bottom,
           paddingTop: 8,
         },
         tabBarActiveTintColor: BLUE,
@@ -75,7 +74,6 @@ export default function CoachLayout() {
     </Tabs>
   );
 }
-
 const st = StyleSheet.create({
   homeBtn: {
     width: 52, height: 52, borderRadius: 26,
