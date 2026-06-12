@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl,
+  StyleSheet,  ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
@@ -69,14 +70,14 @@ export default function AdminLeaderboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <View style={s.center}><ActivityIndicator size="large" color={C.red} /></View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       <View style={s.header}>
         <Text style={s.headerTitle}>🏆 Leaderboard</Text>
         <Text style={s.headerSub}>{filtered.length} of {scored.length} members</Text>

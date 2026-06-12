@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, TextInput, RefreshControl,
+   ActivityIndicator, TextInput, RefreshControl,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
@@ -341,7 +342,7 @@ export default function LeaderboardScreen() {
   const divsToShow = activeDiv === 'All' ? DIVISIONS : [activeDiv];
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

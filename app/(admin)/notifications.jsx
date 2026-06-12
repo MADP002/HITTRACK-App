@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert, Modal,
+  StyleSheet,  ActivityIndicator, Alert, Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
@@ -43,7 +44,7 @@ export default function AdminNotificationsScreen() {
   const [form,         setForm]         = useState({ title: '', message: '', audience: 'all' });
   const [posting,      setPosting]      = useState(false);
   const [clearingActivity, setClearingActivity] = useState(false);
-
+ 
   // Load admin profile
   useEffect(() => {
     const user = auth.currentUser;
@@ -52,7 +53,7 @@ export default function AdminNotificationsScreen() {
       .then(s => { if (s.exists()) setAdminProfile(s.data()); })
       .catch(console.error);
   }, []);
-
+ 
   // Live notifications
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'notifications'), snap => {
@@ -63,7 +64,7 @@ export default function AdminNotificationsScreen() {
     }, console.error);
     return () => unsub();
   }, []);
-
+ 
   // Live activity
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'activity'), snap => {
@@ -76,19 +77,19 @@ export default function AdminNotificationsScreen() {
   }, []);
 
   const realAnnouncements = allNotifs.filter(n => !n.type || !SYSTEM_EVENT_TYPES.includes(n.type));
-
+ 
   const openEdit = (n) => {
     setEditingId(n.id);
     setForm({ title: n.title || '', message: n.message || '', audience: n.audience || 'all' });
     setShowPost(true);
   };
-
+ 
   const closePost = () => {
     setShowPost(false);
     setEditingId(null);
     setForm({ title: '', message: '', audience: 'all' });
   };
-
+ 
   const postAnnouncement = async () => {
     if (!form.title.trim() || !form.message.trim()) {
       Alert.alert('Missing info', 'Please fill in both title and message.');
@@ -123,7 +124,7 @@ export default function AdminNotificationsScreen() {
       console.error(e);
     } finally { setPosting(false); }
   };
-
+ 
   const deleteAnnouncement = (id) => {
     Alert.alert('Delete Announcement?', 'This removes it for everyone permanently.', [
       { text: 'Cancel', style: 'cancel' },
@@ -141,7 +142,7 @@ export default function AdminNotificationsScreen() {
     try { await deleteDoc(doc(db, 'activity', id)); }
     catch (e) { Alert.alert('Error', 'Could not delete.'); }
   };
-
+ 
   const clearAllActivity = () => {
     Alert.alert('Clear All Activity?', `This permanently deletes all ${activity.length} events.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -163,9 +164,9 @@ export default function AdminNotificationsScreen() {
       },
     ]);
   };
-
+ 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       {/* Post/Edit modal */}
       <Modal visible={showPost} transparent animationType="slide" onRequestClose={closePost}>
         <View style={s.modalOverlay}>
@@ -176,7 +177,7 @@ export default function AdminNotificationsScreen() {
                 <Ionicons name="close" size={22} color={C.gray} />
               </TouchableOpacity>
             </View>
-
+      
             {/* Audience picker — admin has full control */}
             <Text style={s.fieldLabel}>Audience</Text>
             <View style={s.audienceRow}>
@@ -193,7 +194,7 @@ export default function AdminNotificationsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
+     
             <Text style={s.fieldLabel}>Title</Text>
             <TextInput
               style={s.formInput}
@@ -203,7 +204,7 @@ export default function AdminNotificationsScreen() {
               placeholderTextColor={C.gray}
               autoCapitalize="sentences"
             />
-
+    
             <Text style={[s.fieldLabel, { marginTop: 12 }]}>Message</Text>
             <TextInput
               style={[s.formInput, { minHeight: 100, textAlignVertical: 'top', paddingTop: 12 }]}
@@ -215,7 +216,7 @@ export default function AdminNotificationsScreen() {
               numberOfLines={4}
               autoCapitalize="sentences"
             />
-
+     
             <TouchableOpacity
               style={[s.postBtn, { backgroundColor: editingId ? C.blue : C.gold }, posting && { opacity: 0.6 }]}
               onPress={postAnnouncement}
@@ -231,7 +232,7 @@ export default function AdminNotificationsScreen() {
           </View>
         </View>
       </Modal>
-
+ 
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>📢 Notifications</Text>
@@ -240,7 +241,7 @@ export default function AdminNotificationsScreen() {
           <Text style={s.postFabText}>Post</Text>
         </TouchableOpacity>
       </View>
-
+    
       {/* Sub-tab toggle */}
       <View style={s.subTabRow}>
         {[
@@ -264,7 +265,7 @@ export default function AdminNotificationsScreen() {
           );
         })}
       </View>
-
+     
       {/* ── ANNOUNCEMENTS ── */}
       {subTab === 'announcements' && (
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -334,7 +335,7 @@ export default function AdminNotificationsScreen() {
               </TouchableOpacity>
             )}
           </View>
-
+       
           <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
             {activity.length === 0 ? (
               <View style={s.emptyBox}>
@@ -397,7 +398,7 @@ const s = StyleSheet.create({
   emptyBox:   { alignItems: 'center', gap: 12, paddingTop: 60 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: C.white },
   emptySub:   { fontSize: 13, color: C.gray, textAlign: 'center', paddingHorizontal: 20 },
-
+ 
   // Announcement card
   announcementCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, padding: 14, overflow: 'hidden' },
   announcementAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
@@ -412,7 +413,7 @@ const s = StyleSheet.create({
   announcementActions: { gap: 6 },
   editBtn: { backgroundColor: C.gold + '18', borderRadius: 8, borderWidth: 1, borderColor: C.gold + '33', padding: 8 },
   deleteAnnouncementBtn: { backgroundColor: C.red + '18', borderRadius: 8, borderWidth: 1, borderColor: C.red + '33', padding: 8 },
-
+ 
   // Activity
   activityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   liveIndicator:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -432,7 +433,7 @@ const s = StyleSheet.create({
   activityActor: { fontSize: 9, color: C.gray, fontStyle: 'italic' },
   activityTime:  { fontSize: 9, color: C.gray },
   actDeleteBtn:  { padding: 4 },
-
+  
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: C.border },

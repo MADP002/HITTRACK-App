@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert, Modal,
+  StyleSheet,  ActivityIndicator, Alert, Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -46,7 +47,7 @@ export default function AnnouncementsScreen() {
   const [form,            setForm]           = useState({ title: '', message: '' });
   const [posting,         setPosting]        = useState(false);
   const [showHidden,      setShowHidden]     = useState(false);
-
+  
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -58,7 +59,7 @@ export default function AnnouncementsScreen() {
     }, console.error);
     return () => unsub();
   }, []);
-
+  
   useEffect(() => {
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, snap => {
@@ -66,7 +67,7 @@ export default function AnnouncementsScreen() {
     }, console.error);
     return () => unsub();
   }, []);
-
+  
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'activity'), snap => {
       const items = snap.docs
@@ -76,12 +77,12 @@ export default function AnnouncementsScreen() {
     }, console.error);
     return () => unsub();
   }, []);
-
+ 
   const realAnnouncements    = allNotifs.filter(n => !n.type || !SYSTEM_EVENT_TYPES.includes(n.type));
   const visibleAnnouncements = realAnnouncements.filter(n => !dismissedNotifs.includes(n.id));
   const hiddenAnnouncements  = realAnnouncements.filter(n =>  dismissedNotifs.includes(n.id));
   const myUid = auth.currentUser?.uid;
-
+ 
   const postAnnouncement = async () => {
     if (!form.title.trim() || !form.message.trim()) {
       Alert.alert('Missing info', 'Please fill in both title and message.');
@@ -100,29 +101,28 @@ export default function AnnouncementsScreen() {
       Alert.alert('Error', 'Could not post. Check Firestore rules.');
     } finally { setPosting(false); }
   };
-
+  
   const dismissAnnouncement = async (id) => {
     const user = auth.currentUser;
     if (!user) return;
     try { await updateDoc(doc(db, 'users', user.uid), { dismissedNotifs: arrayUnion(id) }); }
     catch (e) { console.error(e); }
   };
-
+  
   const unhideAnnouncement = async (id) => {
     const user = auth.currentUser;
     if (!user) return;
     try { await updateDoc(doc(db, 'users', user.uid), { dismissedNotifs: arrayRemove(id) }); }
     catch (e) { console.error(e); }
   };
-
+  
   const deleteActivity = async (id) => {
     try { await deleteDoc(doc(db, 'activity', id)); }
     catch (e) { Alert.alert('Error', 'Could not delete.'); }
   };
-
+  
   return (
-    <SafeAreaView style={s.safe}>
-
+    <SafeAreaView edges={['top']} style={s.safe}>
       {/* ── POST MODAL ── */}
       <Modal visible={showPost} transparent animationType="slide" onRequestClose={() => setShowPost(false)}>
         <View style={s.modalOverlay}>
@@ -169,7 +169,7 @@ export default function AnnouncementsScreen() {
           </View>
         </View>
       </Modal>
-
+   
       {/* ── HEADER ── */}
        <View style={s.header}>
         <TouchableOpacity style={s.coachBackBtn} onPress={() => router.back()}>
@@ -181,7 +181,7 @@ export default function AnnouncementsScreen() {
           <Text style={s.postFabText}>Post</Text>
         </TouchableOpacity>
       </View>
-
+   
       {/* ── SUB-TABS ── */}
       <View style={s.subTabRow}>
         {[
@@ -204,14 +204,14 @@ export default function AnnouncementsScreen() {
           );
         })}
       </View>
-
+      
       {/* ══════════════════════════════════════════
            ANNOUNCEMENTS TAB
       ══════════════════════════════════════════ */}
       {subTab === 'announcements' && (
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-
-          {/* ── HIDDEN SECTION TOGGLE ── */}
+       
+         {/* ── HIDDEN SECTION TOGGLE ── */}
           {hiddenAnnouncements.length > 0 && (
             <TouchableOpacity
               style={[s.hiddenToggle, showHidden && s.hiddenToggleOpen]}
@@ -235,7 +235,7 @@ export default function AnnouncementsScreen() {
               />
             </TouchableOpacity>
           )}
-
+       
           {/* ── HIDDEN ANNOUNCEMENTS (top, grayed out) ── */}
           {showHidden && hiddenAnnouncements.map(n => (
             <View key={n.id} style={s.hiddenCard}>
@@ -264,7 +264,7 @@ export default function AnnouncementsScreen() {
               </TouchableOpacity>
             </View>
           ))}
-
+   
           {/* Divider shown between hidden and visible sections */}
           {showHidden && hiddenAnnouncements.length > 0 && visibleAnnouncements.length > 0 && (
             <View style={s.divider}>
@@ -273,7 +273,7 @@ export default function AnnouncementsScreen() {
               <View style={s.dividerLine} />
             </View>
           )}
-
+       
           {/* ── VISIBLE ANNOUNCEMENTS ── */}
           {visibleAnnouncements.length === 0 && hiddenAnnouncements.length === 0 ? (
             <View style={s.emptyBox}>
@@ -318,7 +318,7 @@ export default function AnnouncementsScreen() {
           )}
         </ScrollView>
       )}
-
+     
       {/* ══════════════════════════════════════════
            ACTIVITY TAB
       ══════════════════════════════════════════ */}
@@ -371,29 +371,26 @@ export default function AnnouncementsScreen() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
   headerTitle: { fontSize: 22, fontWeight: '900', color: C.white },
   postFab: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.gold, borderRadius: 50, paddingHorizontal: 16, paddingVertical: 10 },
   postFabText: { color: '#000', fontSize: 13, fontWeight: '800' },
-
   subTabRow: { flexDirection: 'row', gap: 8, padding: 12 },
   subTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.card },
   subTabText:      { fontSize: 12, fontWeight: '700', color: C.gray },
   subTabCount:     { backgroundColor: C.border, borderRadius: 50, paddingHorizontal: 7, paddingVertical: 1 },
   subTabCountText: { fontSize: 10, fontWeight: '700', color: C.gray },
-
   scroll: { paddingHorizontal: 16, paddingBottom: 40, gap: 12 },
   emptyBox:  { alignItems: 'center', gap: 12, paddingTop: 60 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: C.white },
   emptySub:  { fontSize: 13, color: C.gray, textAlign: 'center', paddingHorizontal: 20 },
-
+ 
   // Hidden toggle
   hiddenToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.card, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 12 },
   hiddenToggleOpen: { borderColor: C.gold + '55', backgroundColor: C.gold + '08' },
   hiddenToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   hiddenToggleText: { fontSize: 13, fontWeight: '700', color: C.gray },
-
+ 
   // Hidden card (grayed out)
   hiddenCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#111111', borderRadius: 16, borderWidth: 1, borderColor: '#252525', padding: 14, overflow: 'hidden', opacity: 0.65 },
   hiddenAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: '#333' },
@@ -404,12 +401,12 @@ const s = StyleSheet.create({
   hiddenBadge: { backgroundColor: '#2A2A2A', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: '#444' },
   hiddenBadgeText: { fontSize: 8, fontWeight: '800', color: C.gray },
   restoreBtn: { padding: 6, backgroundColor: C.gold + '18', borderRadius: 8, borderWidth: 1, borderColor: C.gold + '33' },
-
+ 
   // Divider
   divider:      { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dividerLine:  { flex: 1, height: 1, backgroundColor: C.border },
   dividerLabel: { fontSize: 9, color: C.gray, fontWeight: '800', letterSpacing: 0.8 },
-
+ 
   // Normal announcement card
   announcementCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.gold + '33', padding: 14, overflow: 'hidden' },
   announcementAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: C.gold },
@@ -435,7 +432,7 @@ const s = StyleSheet.create({
   activityActor:    { fontSize: 9, color: C.gray, fontStyle: 'italic' },
   activityTime:     { fontSize: 9, color: C.gray },
   activityDelete:   { padding: 4 },
-
+ 
   // Modal
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalCard:         { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: C.border },

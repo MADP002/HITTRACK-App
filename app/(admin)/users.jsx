@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert, Modal,
+  StyleSheet,  ActivityIndicator, Alert, Modal,
   RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -279,14 +280,14 @@ export default function AdminUsersScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <View style={s.center}><ActivityIndicator size="large" color={C.red} /></View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       {/* ── LEVEL CONTROL MODAL ── */}
       <Modal visible={showLevel} transparent animationType="slide" onRequestClose={() => setShowLevel(false)}>
         <View style={s.modalOverlay}>

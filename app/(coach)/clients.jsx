@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, RefreshControl,
+  StyleSheet,  ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -24,7 +25,7 @@ export default function ClientsScreen() {
   const [refreshing,   setRefreshing]   = useState(false);
   const [searchQ,      setSearchQ]      = useState('');
   const [coachProfile, setCoachProfile] = useState({ name: 'Coach' });
-
+ 
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -53,21 +54,21 @@ export default function ClientsScreen() {
   }, []);
 
   useEffect(() => { loadMembers(); }, []);
-
+ 
   const filtered = members.filter(m =>
     !searchQ || m.name?.toLowerCase().includes(searchQ.toLowerCase())
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.blue} /></View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
@@ -81,7 +82,7 @@ export default function ClientsScreen() {
           <Text style={styles.portalBadgeText}>COACH</Text>
         </View>
       </View>
-
+  
       {/* Search */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
@@ -102,9 +103,9 @@ export default function ClientsScreen() {
           )}
         </View>
       </View>
-
+   
       <Text style={styles.countText}>{filtered.length} member{filtered.length !== 1 ? 's' : ''}</Text>
-
+   
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -130,7 +131,7 @@ export default function ClientsScreen() {
                 activeOpacity={0.8}
               >
                 <View style={[styles.cardAccent, { backgroundColor: lc }]} />
-
+      
                 {/* Avatar */}
                 <View style={[styles.avatar, { borderColor: lc, backgroundColor: lc + '22' }]}>
                   <Text style={[styles.avatarText, { color: lc }]}>{(m.name||'?')[0].toUpperCase()}</Text>
@@ -138,7 +139,7 @@ export default function ClientsScreen() {
                     <Text style={{ fontSize: 8 }}>{li}</Text>
                   </View>
                 </View>
-
+       
                 {/* Info */}
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardName} numberOfLines={1}>{m.name}</Text>
@@ -159,7 +160,7 @@ export default function ClientsScreen() {
                     )}
                   </View>
                 </View>
-
+      
                 {/* Stats */}
                 <View style={styles.cardStats}>
                   <View style={styles.statItem}>
@@ -177,7 +178,7 @@ export default function ClientsScreen() {
                     <Text style={styles.statIcon}>📅</Text>
                   </View>
                 </View>
-
+ 
                 <Ionicons name="chevron-forward" size={16} color={COLORS.gray} />
               </TouchableOpacity>
             );
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
   statItem:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
   statVal:   { fontSize: 12, fontWeight: '800' },
   statIcon:  { fontSize: 11 },
-
+  
   coachBackBtn: {
     width: 38, height: 38, borderRadius: 10,
     backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#2A2A2A',

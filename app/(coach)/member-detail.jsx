@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert,
+  StyleSheet,  ActivityIndicator, Alert,
   Modal, Dimensions, Linking, Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -266,14 +267,14 @@ export default function MemberDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.blue} /></View>
       </SafeAreaView>
     );
   }
   if (!member) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.center}>
           <Text style={{ color: COLORS.gray }}>Member not found.</Text>
           <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
@@ -290,7 +291,7 @@ export default function MemberDetailScreen() {
   const selRow  = fbDay !== null ? workoutRows.find(r => r.idx === fbDay) : null;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* ── LEVEL CONTROL MODAL ── */}
       <Modal visible={showLevel} transparent animationType="slide" onRequestClose={() => setShowLevel(false)}>
         <View style={styles.modalOverlay}>

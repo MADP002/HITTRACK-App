@@ -1,2 +1,5 @@
-// Member inbox — full messaging screen
-export { default } from '../../components/InboxScreen';
+import InboxScreen from '../../components/InboxScreen';
+
+export default function ForumScreen() {
+  return <InboxScreen />;
+}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, ActivityIndicator,
+  StyleSheet,  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -38,7 +39,7 @@ export default function TrainingDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <View style={s.center}><ActivityIndicator size="large" color={C.red} /></View>
       </SafeAreaView>
     );
@@ -46,7 +47,7 @@ export default function TrainingDetailScreen() {
 
   if (!training) {
     return (
-      <SafeAreaView style={s.safe}>
+      <SafeAreaView edges={['top']} style={s.safe}>
         <View style={s.center}>
           <Text style={{ fontSize: 48 }}>❓</Text>
           <Text style={{ color: C.white, fontSize: 18, fontWeight: '800', marginTop: 12 }}>Training not found</Text>
@@ -64,7 +65,7 @@ export default function TrainingDetailScreen() {
   const repUnit     = training.type === 'strength' ? 'reps' : 'proper reps';
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView edges={['top']} style={s.safe}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>

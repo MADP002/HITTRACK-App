@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Modal,
+  StyleSheet,  ActivityIndicator, Modal,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
@@ -54,8 +55,7 @@ function fmtMsgDate(ts) {
 export default function InboxScreen() {
   const currentUid = auth.currentUser?.uid;
    const router = useRouter();
-
-   const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
+  const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
   const [messages,      setMessages]      = useState([]);
   const [users,         setUsers]         = useState([]);
   const [readMap,       setReadMap]       = useState({});  // uid → last-read ts (seconds)
@@ -98,7 +98,7 @@ export default function InboxScreen() {
     }, console.error);
     return () => unsub();
   }, [currentUid]);
- 
+
   // Load all other users (for compose + name/role lookup)
   useEffect(() => {
     if (!currentUid) return;
@@ -170,7 +170,7 @@ export default function InboxScreen() {
     } catch (e) { console.error('Forum send error:', e); }
     setSendingForum(false);
   };
- 
+
   // Open a conversation + mark as read
   const openConversation = useCallback((uid) => {
     setActiveUid(uid);
@@ -208,9 +208,9 @@ export default function InboxScreen() {
     }
     return Object.values(map).sort((a, b) => b.lastTs - a.lastTs);
   }, [messages, users, currentUid, readMap]);
- 
-  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
 
+  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
+ 
   // Forum unread = messages from others since last viewed
   const forumUnread = forumMessages.filter(m =>
     m.from !== currentUid &&
@@ -269,19 +269,18 @@ export default function InboxScreen() {
     try { await deleteDoc(doc(db, 'messages', msgId)); }
     catch (e) { console.error('Delete error:', e); }
   };
-
+ 
   const myRoleColor = ROLE_COLOR[profile.role] || C.gold;
  
   return (
-    <SafeAreaView style={s.safe}>
- 
+    <SafeAreaView edges={['top']} style={s.safe}>
       {/* ══════════════════════════════════════════════════════════
            THREAD MODAL
       ══════════════════════════════════════════════════════════ */}
       <Modal visible={showThread} animationType="slide" onRequestClose={() => setShowThread(false)}>
-        <SafeAreaView style={s.safe}>
+        <SafeAreaView edges={['top']} style={s.safe}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
-  
+      
             {/* Header */}
             {activeConv && (() => {
               const rc = ROLE_COLOR[activeConv.role] || C.gold;
@@ -302,7 +301,7 @@ export default function InboxScreen() {
                 </View>
               );
             })()}
-   
+     
             {/* Messages */}
             <ScrollView
               ref={scrollRef}
@@ -361,7 +360,7 @@ export default function InboxScreen() {
                 })
               )}
             </ScrollView>
-  
+   
             {/* Input bar */}
             <View style={s.inputBar}>
               <TextInput
@@ -388,12 +387,12 @@ export default function InboxScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
- 
+   
       {/* ══════════════════════════════════════════════════════
            FORUM GROUP CHAT MODAL
       ══════════════════════════════════════════════════════ */}
       <Modal visible={showForum} animationType="slide" onRequestClose={() => setShowForum(false)}>
-        <SafeAreaView style={s.safe}>
+        <SafeAreaView edges={['top']} style={s.safe}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             {/* Header */}
             <View style={s.forumHeader}>
@@ -408,7 +407,7 @@ export default function InboxScreen() {
                 <Text style={s.forumHeaderBadgeText}>{forumMessages.length}</Text>
               </View>
             </View>
-  
+     
             {/* Messages */}
             <ScrollView
               ref={forumScrollRef}
@@ -475,7 +474,7 @@ export default function InboxScreen() {
                 })
               )}
             </ScrollView>
-   
+    
             {/* Input */}
             <View style={s.inputBar}>
               <TextInput
@@ -501,7 +500,7 @@ export default function InboxScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
-  
+ 
       {/* ══════════════════════════════════════════════════════════
            COMPOSE MODAL
       ══════════════════════════════════════════════════════════ */}
@@ -510,14 +509,14 @@ export default function InboxScreen() {
         animationType="slide"
         onRequestClose={() => { setShowCompose(false); setComposeSearch(''); }}
       >
-        <SafeAreaView style={s.safe}>
+        <SafeAreaView edges={['top']} style={s.safe}>
           <View style={s.composeHeader}>
             <TouchableOpacity style={s.iconBtn} onPress={() => { setShowCompose(false); setComposeSearch(''); }}>
               <Ionicons name="arrow-back" size={20} color={C.white} />
             </TouchableOpacity>
             <Text style={s.composeTitle}>New Message</Text>
           </View>
-
+   
           {/* Search */}
           <View style={s.composeSearchBox}>
             <Ionicons name="search-outline" size={16} color={C.gray} />
@@ -540,7 +539,7 @@ export default function InboxScreen() {
           <Text style={s.composeMeta}>
             {composeFiltered.length} {composeFiltered.length === 1 ? 'person' : 'people'} available
           </Text>
- 
+   
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
             {composeFiltered.length === 0 ? (
               <Text style={[s.composeMeta, { textAlign: 'center', paddingTop: 40 }]}>No results for "{composeSearch}"</Text>
@@ -577,12 +576,11 @@ export default function InboxScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-
-
+   
       {/* ══════════════════════════════════════════════════════════
            CONVERSATION LIST
       ══════════════════════════════════════════════════════════ */}
-
+  
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity style={s.inboxBackBtn} onPress={handleBack}>
@@ -601,7 +599,7 @@ export default function InboxScreen() {
           <Text style={s.newBtnText}>New</Text>
         </TouchableOpacity>
       </View>
- 
+  
       {/* Search */}
       <View style={s.searchWrap}>
         <View style={s.searchBox}>
@@ -622,9 +620,7 @@ export default function InboxScreen() {
           )}
         </View>
       </View>
-
-
-
+  
       {/* ══════════════════════════════════════════════════════
            FORUM GROUP CHAT CARD (pinned above DMs)
       ══════════════════════════════════════════════════════ */}
@@ -660,14 +656,14 @@ export default function InboxScreen() {
           )}
         </View>
       </TouchableOpacity>
-
+  
       {/* Divider between Forum and DMs */}
       <View style={s.forumDivider}>
         <View style={s.dividerLine2} />
         <Text style={s.dividerLabel2}>DIRECT MESSAGES</Text>
         <View style={s.dividerLine2} />
       </View>
- 
+   
       {/* List */}
       <ScrollView contentContainerStyle={s.listScroll} showsVerticalScrollIndicator={false}>
         {filteredConvs.length === 0 ? (
@@ -698,7 +694,7 @@ export default function InboxScreen() {
               >
                 {/* Unread accent stripe */}
                 {hasUnread && <View style={[s.convAccent, { backgroundColor: rc }]} />}
-
+      
                 {/* Avatar */}
                 <View style={{ position: 'relative', flexShrink: 0 }}>
                   <View style={[s.convAvatar, { borderColor: rc + '55', backgroundColor: rc + '22' }]}>
@@ -710,7 +706,7 @@ export default function InboxScreen() {
                     </View>
                   )}
                 </View>
-
+       
                 {/* Content */}
                 <View style={s.convContent}>
                   <View style={s.convTopRow}>
@@ -740,7 +736,7 @@ export default function InboxScreen() {
 // ── STYLES ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
- 
+
   // Conversation list header
   header:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -749,12 +745,12 @@ const s = StyleSheet.create({
   totalUnreadText:  { fontSize: 11, fontWeight: '800', color: C.white },
   newBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 50, paddingHorizontal: 14, paddingVertical: 8 },
   newBtnText: { fontSize: 12, fontWeight: '800', color: '#000' },
-  
+ 
   // Search
   searchWrap: { paddingHorizontal: 16, paddingVertical: 10 },
   searchBox:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 46 },
   searchInput:{ flex: 1, color: C.white, fontSize: 14 },
-  
+ 
   // Conversation rows
   listScroll: { paddingBottom: 40 },
   convRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border, position: 'relative' },
@@ -770,7 +766,7 @@ const s = StyleSheet.create({
   rolePill:   { borderRadius: 50, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1, alignSelf: 'flex-start' },
   rolePillText:{ fontSize: 9, fontWeight: '700' },
   convPreview:{ fontSize: 12, color: C.gray },
-  
+ 
   // Empty states
   emptyBox:  { alignItems: 'center', gap: 14, paddingTop: 80 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: C.white },
@@ -783,7 +779,7 @@ const s = StyleSheet.create({
   tAvatarText: { fontSize: 16, fontWeight: '900' },
   tName:       { fontSize: 15, fontWeight: '800', color: C.white },
   tRole:       { fontSize: 10, fontWeight: '600', marginTop: 2 },
-  
+ 
   // Thread messages
   threadScroll: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, flexGrow: 1 },
   emptyThread:  { alignItems: 'center', gap: 10, paddingTop: 80 },
@@ -804,7 +800,7 @@ const s = StyleSheet.create({
   inputBar: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border },
   textInput:{ flex: 1, backgroundColor: C.card, borderRadius: 20, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 10, color: C.white, fontSize: 14, maxHeight: 120 },
   sendBtn:  { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
-
+  
   // Compose
   composeHeader:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   composeTitle:      { fontSize: 18, fontWeight: '900', color: C.white },
@@ -816,7 +812,7 @@ const s = StyleSheet.create({
   composeAvatarText: { fontSize: 16, fontWeight: '900' },
   composeUserName:   { fontSize: 14, fontWeight: '700', color: C.white },
   composeUserRole:   { fontSize: 11, fontWeight: '600', marginTop: 2 },
- 
+  
   // Forum card
   forumCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -840,7 +836,7 @@ const s = StyleSheet.create({
   forumDivider:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 4, marginTop: 8 },
   dividerLine2:  { flex: 1, height: 1, backgroundColor: '#2A2A2A' },
   dividerLabel2: { fontSize: 9, color: '#555', fontWeight: '700', letterSpacing: 0.8 },
- 
+  
   // Forum thread header
   forumHeader:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
   forumHeaderInfo:  { flex: 1 },
@@ -848,7 +844,7 @@ const s = StyleSheet.create({
   forumHeaderSub:   { fontSize: 10, color: '#888888', marginTop: 1 },
   forumHeaderBadge: { backgroundColor: '#6366f122', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#6366f155' },
   forumHeaderBadgeText: { fontSize: 11, fontWeight: '700', color: '#a5b4fc' },
- 
+  
   // Forum sender row
   forumSenderRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 24, marginTop: 8, marginBottom: 2 },
   forumSenderAvatar:{ width: 18, height: 18, borderRadius: 9, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },

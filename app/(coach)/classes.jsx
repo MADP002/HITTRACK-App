@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, SafeAreaView, ActivityIndicator, Alert,
+  StyleSheet,  ActivityIndicator, Alert,
   Modal, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
@@ -40,7 +41,7 @@ export default function ClassesScreen() {
   const [newClass, setNewClass] = useState({
     name: '', day: 'Monday', time: '6:00 AM', level: 'Beginner', spots: '12',
   });
-
+ 
   // Load coach profile
   useEffect(() => {
     const user = auth.currentUser;
@@ -49,7 +50,7 @@ export default function ClassesScreen() {
       .then(s => { if (s.exists()) setCoachProfile(s.data()); })
       .catch(console.error);
   }, []);
-
+ 
   // Load classes
   const loadClasses = useCallback(async () => {
     try {
@@ -60,7 +61,7 @@ export default function ClassesScreen() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
-
+ 
   useEffect(() => { loadClasses(); }, []);
 
   // Live bookings stream
@@ -72,7 +73,7 @@ export default function ClassesScreen() {
   }, []);
 
   const activeClasses = classes.filter(isClassActive);
-
+ 
   const createClass = async () => {
     if (!newClass.name.trim()) { Alert.alert('Missing info', 'Please enter a class name.'); return; }
     setCreating(true);
@@ -96,7 +97,7 @@ export default function ClassesScreen() {
     } catch (e) { Alert.alert('Error', 'Could not create class.'); console.error(e); }
     finally { setCreating(false); }
   };
-
+ 
   const handleEndClass = (cls) => {
     Alert.alert(
       '🏁 Mark as Done?',
@@ -122,7 +123,7 @@ export default function ClassesScreen() {
       ]
     );
   };
-
+ 
   const handleDeleteClass = (cls) => {
     Alert.alert(
       'Delete Class?',
@@ -167,17 +168,17 @@ export default function ClassesScreen() {
       </ScrollView>
     </View>
   );
-
+ 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView edges={['top']} style={styles.safe}>
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.blue} /></View>
       </SafeAreaView>
     );
   }
-
+ 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Create modal */}
       <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
         <View style={styles.modalOverlay}>
@@ -188,7 +189,7 @@ export default function ClassesScreen() {
                 <Ionicons name="close" size={22} color={COLORS.gray} />
               </TouchableOpacity>
             </View>
-
+           
             <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 12 }}>
               {/* Class name */}
               <View style={styles.pickerField}>
@@ -202,13 +203,13 @@ export default function ClassesScreen() {
                   autoCapitalize="words"
                 />
               </View>
-
+    
               <PickerRow label="Day"   options={DAYS}   value={newClass.day}   onSelect={v => setNewClass(p => ({ ...p, day: v }))} />
               <PickerRow label="Time"  options={TIMES}  value={newClass.time}  onSelect={v => setNewClass(p => ({ ...p, time: v }))} />
               <PickerRow label="Level" options={LEVELS} value={newClass.level} onSelect={v => setNewClass(p => ({ ...p, level: v }))} />
               <PickerRow label="Max Spots" options={SPOTS} value={newClass.spots} onSelect={v => setNewClass(p => ({ ...p, spots: v }))} />
             </ScrollView>
-
+      
             <TouchableOpacity
               style={[styles.createBtn, creating && { opacity: 0.6 }]}
               onPress={createClass}
@@ -222,7 +223,7 @@ export default function ClassesScreen() {
           </View>
         </View>
       </Modal>
-
+   
       {/* Header */}
      <View style={styles.header}>
         <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
@@ -237,7 +238,7 @@ export default function ClassesScreen() {
           <Text style={styles.createFabText}>Create</Text>
         </TouchableOpacity>
       </View>
-
+    
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -263,11 +264,11 @@ export default function ClassesScreen() {
             const lc             = LEVEL_COLORS[cls.level] || COLORS.gold;
             const li             = LEVEL_ICONS[cls.level]  || '🥊';
             const isEnding       = ending === cls.id;
-
+      
             return (
               <View key={cls.id} style={[styles.classCard, { borderColor: lc + '33' }]}>
                 <View style={[styles.classAccent, { backgroundColor: lc }]} />
-
+          
                 {/* Top row */}
                 <View style={styles.classTop}>
                   {/* Day badge */}
@@ -275,7 +276,7 @@ export default function ClassesScreen() {
                     <Text style={styles.dayBadgeDay}>{(cls.day || '').slice(0, 3).toUpperCase()}</Text>
                     <Text style={styles.dayBadgeTime}>{cls.time}</Text>
                   </View>
-
+          
                   {/* Info */}
                   <View style={styles.classInfo}>
                     <Text style={styles.className}>{cls.name}</Text>
@@ -290,7 +291,7 @@ export default function ClassesScreen() {
                       )}
                     </View>
                   </View>
-
+      
                   {/* Action buttons */}
                   <View style={styles.classActions}>
                     <TouchableOpacity
@@ -308,7 +309,7 @@ export default function ClassesScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-
+     
                 {/* Enrollment bar */}
                 <View style={styles.enrollSection}>
                   <View style={styles.enrollHeader}>
@@ -328,7 +329,7 @@ export default function ClassesScreen() {
                     <Text style={[styles.almostFull, { color: COLORS.red }]}>🔥 Almost Full!</Text>
                   )}
                 </View>
-
+     
                 {/* Booked members */}
                 {classBookings.length > 0 && (
                   <View style={styles.bookedSection}>
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
   },
   createFabText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
   scroll: { paddingHorizontal: 16, paddingBottom: 40, gap: 14, paddingTop: 14 },
-
+ 
   emptyBox:   { alignItems: 'center', gap: 12, paddingTop: 60 },
   emptyTitle: { fontSize: 20, fontWeight: '900', color: COLORS.white },
   emptySub:   { fontSize: 13, color: COLORS.gray },
@@ -411,7 +412,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.red + '33',
     padding: 8, alignItems: 'center',
   },
-
+ 
   // Enrollment
   enrollSection: { paddingHorizontal: 14, paddingBottom: 14 },
   enrollHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -424,7 +425,7 @@ const styles = StyleSheet.create({
   enrollBarBg:   { height: 8, backgroundColor: COLORS.border, borderRadius: 50, overflow: 'hidden' },
   enrollBarFill: { height: '100%', borderRadius: 50 },
   almostFull:    { fontSize: 11, fontWeight: '700', marginTop: 6 },
-
+ 
   // Booked
   bookedSection: {
     paddingHorizontal: 14, paddingBottom: 14,
@@ -438,7 +439,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 3,
   },
   bookedPillText: { fontSize: 10, color: COLORS.blue, fontWeight: '600' },
-
+ 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalCard: {
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   modalTitle:  { fontSize: 18, fontWeight: '900', color: COLORS.white },
-
+ 
   // Picker
   pickerField: { marginBottom: 18 },
   pickerLabel: { fontSize: 11, color: COLORS.gray, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 },
@@ -459,13 +460,13 @@ const styles = StyleSheet.create({
   pickerOptActive: { backgroundColor: COLORS.red + '22', borderColor: COLORS.red + '66' },
   pickerOptText:       { fontSize: 12, fontWeight: '700', color: COLORS.gray },
   pickerOptTextActive: { color: COLORS.red },
-
+ 
   nameInput: {
     backgroundColor: COLORS.inputBg, borderRadius: 12,
     borderWidth: 1, borderColor: COLORS.border,
     paddingHorizontal: 14, height: 48, color: COLORS.white, fontSize: 15,
   },
-
+  
   createBtn: {
     backgroundColor: COLORS.red, borderRadius: 14, height: 52,
     justifyContent: 'center', alignItems: 'center', marginTop: 16,
