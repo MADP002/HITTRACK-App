@@ -43,6 +43,7 @@ export default function TrainingCameraScreen() {
   // Refs mirror state so the async capture loop never reads stale values
   const phaseRef        = useRef(phase);
   const requiredRepsRef = useRef(0);
+  const trainingRef      = useRef(null);
   const repsRef          = useRef(0);
   const detectorRef      = useRef(null);
   const isProcessingRef  = useRef(false);
@@ -79,6 +80,7 @@ export default function TrainingCameraScreen() {
         }
 
         setTraining(found);
+        trainingRef.current = found;
         const req = getRequiredReps(found, level);
         setRequiredReps(req);
         requiredRepsRef.current = req;
@@ -195,12 +197,12 @@ export default function TrainingCameraScreen() {
     router.replace({
       pathname: '/(member)/training-complete',
       params: {
-        trainingId: training?.id,
+        trainingId: trainingRef.current?.id,
         level,
         properReps: repsRef.current,
         requiredReps: requiredRepsRef.current,
         duration,
-        trainingName: training?.name,
+        trainingName: trainingRef.current?.name,
       },
     });
   };
@@ -212,12 +214,12 @@ export default function TrainingCameraScreen() {
         'Your progress in this session will be lost if you leave now.',
         [
           { text: 'Stay', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => { stopLoopAndTimer(); router.back(); } },
+          { text: 'Leave', style: 'destructive', onPress: () => { stopLoopAndTimer(); router.replace('/(member)/training-lab'); } },
         ]
       );
     } else {
       stopLoopAndTimer();
-      router.back();
+      router.replace('/(member)/training-lab');
     }
   };
 

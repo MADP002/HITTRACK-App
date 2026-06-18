@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -105,7 +106,15 @@ export default function TrainingLabScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { loadData(); }, []);
+  // Reload every time this screen comes back into focus — not just on first
+  // mount — since returning from training-complete reuses the existing
+  // screen instance instead of remounting it, which would otherwise leave
+  // stale unlock/completion data on screen even though Firestore is correct.
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   // ── Unlock logic ──────────────────────────────────────────────
   // A training is unlocked if it's the first one OR the previous
