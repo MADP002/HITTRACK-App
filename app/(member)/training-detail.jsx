@@ -51,7 +51,7 @@ export default function TrainingDetailScreen() {
         <View style={s.center}>
           <Text style={{ fontSize: 48 }}>❓</Text>
           <Text style={{ color: C.white, fontSize: 18, fontWeight: '800', marginTop: 12 }}>Training not found</Text>
-          <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={s.backBtn} onPress={() => router.replace('/(member)/training-lab')}>
             <Text style={{ color: C.red, fontWeight: '700' }}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -68,7 +68,7 @@ export default function TrainingDetailScreen() {
     <SafeAreaView edges={['top']} style={s.safe}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={s.iconBtn} onPress={() => router.replace('/(member)/training-lab')}>
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>{training.name}</Text>

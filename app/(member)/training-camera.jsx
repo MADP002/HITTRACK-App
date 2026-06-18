@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { auth, db } from '../../firebase';
@@ -56,7 +57,41 @@ export default function TrainingCameraScreen() {
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { requiredRepsRef.current = requiredReps; }, [requiredReps]);
 
-  // ── Load training + user stance, preload the model ──────────────────────
+  // ── Full reset every time this screen gains focus ─────────────────────
+  // When the user exits mid-session and returns to the same training,
+  // React Navigation reuses the existing screen instance instead of
+  // remounting it — so the old frozen state (paused phase, stale elapsed
+  // time, half-run capture loop) persists until something forces a reset.
+  // useFocusEffect guarantees a clean slate every single visit.
+  useFocusEffect(
+    useCallback(() => {
+      // Stop anything that might still be running
+      phaseRef.current = 'loading';
+      if (loopTimeoutRef.current)  { clearTimeout(loopTimeoutRef.current);   loopTimeoutRef.current  = null; }
+      if (timerIntervalRef.current){ clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
+      isProcessingRef.current = false;
+      repsRef.current = 0;
+
+      // Reset visible state — if training data is already loaded from a
+      // previous visit, go straight to 'ready' so the user sees the
+      // "Get In Position" screen immediately. If it's a fresh mount and
+      // the data hasn't arrived yet, keep 'loading' so the fetch can run.
+      setPhase(trainingRef.current ? 'ready' : 'loading');
+      setReps(0);
+      setElapsed(0);
+      setFeedbackText('');
+      detectorRef.current?.reset();
+
+      return () => {
+        // Stop everything when the screen loses focus
+        phaseRef.current = 'stopped';
+        if (loopTimeoutRef.current)  { clearTimeout(loopTimeoutRef.current);   loopTimeoutRef.current  = null; }
+        if (timerIntervalRef.current){ clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
+      };
+    }, [])
+  );
+
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
