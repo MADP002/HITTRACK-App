@@ -340,13 +340,6 @@ export default function TrainingCameraScreen() {
       {/* ── ACTIVE HUD ── */}
       {phase === 'active' && (
         <>
-          <View style={s.hudTop}>
-            <View style={s.timerPill}>
-              <Ionicons name="time-outline" size={14} color={C.white} />
-              <Text style={s.timerText}>{fmtTime(elapsed)}</Text>
-            </View>
-          </View>
-
           <View style={s.hudBottom}>
             <View style={s.repsCard}>
               <Text style={s.repsNum}>{reps}</Text>
@@ -397,6 +390,17 @@ export default function TrainingCameraScreen() {
           )}
           {phase === 'active' && <View style={{ width: 38 }} />}
         </View>
+
+        {/* Timer sits naturally below the title row — never overlaps regardless
+            of device safe-area / notch size, since it flows in the same column. */}
+        {phase === 'active' && (
+          <View style={s.timerRow} pointerEvents="none">
+            <View style={s.timerPill}>
+              <Ionicons name="time-outline" size={14} color={C.white} />
+              <Text style={s.timerText}>{fmtTime(elapsed)}</Text>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -429,7 +433,7 @@ const s = StyleSheet.create({
   startBtnText: { color: C.white, fontWeight: '800', fontSize: 15 },
 
   // Active HUD
-  hudTop:    { position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center' },
+  timerRow:  { alignItems: 'center', marginTop: 10 },
   timerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 50, paddingHorizontal: 14, paddingVertical: 8 },
   timerText: { color: C.white, fontWeight: '800', fontSize: 14 },
 
