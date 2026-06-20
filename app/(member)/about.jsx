@@ -61,16 +61,7 @@ const CONTACT = [
 
 export default function AboutUsScreen() {
   const router = useRouter();
-  const [msgForm, setMsgForm] = useState({ name: '', email: '', message: '' });
-
-  const handleSend = () => {
-    if (!msgForm.name.trim() || !msgForm.email.trim() || !msgForm.message.trim()) {
-      Alert.alert('Missing info', 'Please fill in all fields before sending.');
-      return;
-    }
-    Alert.alert('Message Sent! 🥊', 'Thanks for reaching out. We\'ll get back to you shortly.');
-    setMsgForm({ name: '', email: '', message: '' });
-  };
+ 
 
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
@@ -201,44 +192,6 @@ export default function AboutUsScreen() {
                 </View>
               </View>
             ))}
-          </View>
-        </View>
-
-        {/* ── SEND MESSAGE FORM ── */}
-        <View style={s.card}>
-          <Text style={s.sectionTitle}>Send a Message</Text>
-          <Text style={[s.bodyText, { marginBottom: 16 }]}>Have a question or want to visit? Reach out and we'll get back to you.</Text>
-          <View style={{ gap: 12 }}>
-            <TextInput
-              style={s.formInput}
-              placeholder="Full Name"
-              placeholderTextColor={C.gray}
-              value={msgForm.name}
-              onChangeText={v => setMsgForm(p => ({ ...p, name: v }))}
-              autoCapitalize="words"
-            />
-            <TextInput
-              style={s.formInput}
-              placeholder="Email Address"
-              placeholderTextColor={C.gray}
-              value={msgForm.email}
-              onChangeText={v => setMsgForm(p => ({ ...p, email: v }))}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={[s.formInput, { minHeight: 110, textAlignVertical: 'top' }]}
-              placeholder="Your message..."
-              placeholderTextColor={C.gray}
-              value={msgForm.message}
-              onChangeText={v => setMsgForm(p => ({ ...p, message: v }))}
-              multiline
-              numberOfLines={4}
-              autoCapitalize="sentences"
-            />
-            <TouchableOpacity style={s.sendBtn} onPress={handleSend} activeOpacity={0.85}>
-              <Text style={s.sendBtnText}>Send Message 🥊</Text>
-            </TouchableOpacity>
           </View>
         </View>
 

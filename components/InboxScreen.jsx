@@ -400,7 +400,7 @@ export default function InboxScreen() {
                 <Ionicons name="arrow-back" size={20} color={C.white} />
               </TouchableOpacity>
               <View style={s.forumHeaderInfo}>
-                <Text style={s.forumHeaderTitle}>🌐 Forum</Text>
+                <Text style={s.forumHeaderTitle}>🌐 Forum community</Text>
                 <Text style={s.forumHeaderSub}>All members · coaches · admins</Text>
               </View>
               <View style={[s.forumHeaderBadge]}>
