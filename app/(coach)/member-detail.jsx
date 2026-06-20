@@ -50,6 +50,8 @@ export default function MemberDetailScreen() {
   const msgEndRef = useRef(null);
   const [recordings,  setRecordings]  = useState([]);
   const [showCert,    setShowCert]    = useState(false);
+  const [showReport,  setShowReport]  = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
   const [certLoading, setCertLoading] = useState(false);
 
   // Load coach profile
@@ -107,6 +109,17 @@ export default function MemberDetailScreen() {
     };
     load();
   }, [uid]);
+
+  // Mark a training report as viewed by the coach
+  const markReportViewed = async (rec) => {
+    setSelectedReport(rec);
+    setShowReport(true);
+    if (!rec.viewed) {
+      try {
+        await updateDoc(doc(db, 'trainingRecordings', rec.id), { viewed: true });
+      } catch (e) { console.warn('Could not mark report as viewed:', e); }
+    }
+  };
 
   // Load training recordings sent to this coach by this member
   useEffect(() => {
@@ -616,12 +629,12 @@ export default function MemberDetailScreen() {
           </View>
         )}
 
-        {/* ── SUBMITTED RECORDINGS ── */}
+        {/* ── SUBMITTED REPORTS ── */}
         <View style={[styles.card, { borderColor: recordings.length > 0 ? COLORS.blue + '44' : COLORS.border }]}>
           <View style={styles.recordingsHeader}>
-            <Ionicons name="videocam-outline" size={18} color={recordings.length > 0 ? COLORS.blue : COLORS.gray} />
+            <Ionicons name="document-text-outline" size={18} color={recordings.length > 0 ? COLORS.blue : COLORS.gray} />
             <Text style={styles.sectionTitle}>
-              📹 Training Recordings {recordings.length > 0 ? `(${recordings.length})` : ''}
+              📋 Training Reports {recordings.length > 0 ? `(${recordings.length})` : ''}
             </Text>
             {recordings.length > 0 && (
               <View style={styles.newBadge}>
@@ -630,7 +643,7 @@ export default function MemberDetailScreen() {
             )}
           </View>
           {recordings.length === 0 ? (
-            <Text style={styles.noRecordingsText}>No recordings submitted yet. They will appear here when {member?.name?.split(' ')[0] || 'the member'} submits one.</Text>
+            <Text style={styles.noRecordingsText}>No reports submitted yet. They will appear here when {member?.name?.split(' ')[0] || 'the member'} completes a training.</Text>
           ) : (
             recordings.map((rec, i) => {
               const ts = rec.submittedAt?.seconds ? new Date(rec.submittedAt.seconds * 1000) : null;
@@ -638,11 +651,11 @@ export default function MemberDetailScreen() {
                 <TouchableOpacity
                   key={rec.id}
                   style={[styles.recordingRow, i < recordings.length - 1 && { borderBottomWidth: 1, borderBottomColor: COLORS.border }]}
-                  onPress={() => rec.recordingUrl && Linking.openURL(rec.recordingUrl)}
+                  onPress={() => markReportViewed(rec)}
                   activeOpacity={0.8}
                 >
                   <View style={styles.recordingIcon}>
-                    <Ionicons name="play-circle" size={28} color={COLORS.blue} />
+                    <Ionicons name="document-text" size={28} color={COLORS.blue} />
                   </View>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.recordingName}>{rec.trainingName || rec.trainingId}</Text>
@@ -662,7 +675,7 @@ export default function MemberDetailScreen() {
                     {ts && <Text style={styles.recordingDate}>{ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>}
                   </View>
                   {!rec.viewed && <View style={styles.unviewedDot} />}
-                  <Ionicons name="open-outline" size={16} color={COLORS.gray} />
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.gray} />
                 </TouchableOpacity>
               );
             })
@@ -705,6 +718,94 @@ export default function MemberDetailScreen() {
               <Ionicons name="shield-checkmark-outline" size={16} color="#000" />
               <Text style={[styles.openCertBtnText, { color: '#000' }]}>Certificate on File ✓</Text>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── TRAINING REPORT VIEWER MODAL ── */}
+      <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
+        <View style={styles.certModalOverlay}>
+          <View style={styles.certModalCard}>
+            <View style={styles.certModalHeader}>
+              <Text style={styles.certModalTitle}>📋 Training Report</Text>
+              <TouchableOpacity onPress={() => setShowReport(false)}>
+                <Ionicons name="close" size={22} color={COLORS.gray} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedReport && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '80%' }}>
+                <Text style={styles.certMemberName}>{selectedReport.trainingName || selectedReport.trainingId}</Text>
+                <Text style={styles.certInjuryLabel}>
+                  Level: <Text style={{ color: COLORS.white }}>{selectedReport.level || 'Beginner'}</Text>
+                  {selectedReport.submittedAt?.seconds && (
+                    <Text style={{ color: COLORS.gray }}>
+                      {'  ·  '}{new Date(selectedReport.submittedAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  )}
+                </Text>
+
+                {/* Core results */}
+                <View style={reportStyles.statsGrid}>
+                  <View style={reportStyles.statBox}>
+                    <Text style={reportStyles.statBoxVal}>{selectedReport.properReps || 0}</Text>
+                    <Text style={reportStyles.statBoxLabel}>Proper Reps</Text>
+                  </View>
+                  <View style={reportStyles.statBox}>
+                    <Text style={reportStyles.statBoxVal}>
+                      {selectedReport.duration ? `${Math.floor(selectedReport.duration / 60)}:${String(selectedReport.duration % 60).padStart(2, '0')}` : '—'}
+                    </Text>
+                    <Text style={reportStyles.statBoxLabel}>Duration</Text>
+                  </View>
+                </View>
+
+                {/* Performance breakdown */}
+                {(selectedReport.avgQualityPct != null || selectedReport.paceRepsPerMin != null ||
+                  selectedReport.consistencyPct != null || selectedReport.bestStreak != null) && (
+                  <>
+                    <Text style={reportStyles.breakdownTitle}>Performance Breakdown</Text>
+                    <View style={reportStyles.statsGrid}>
+                      {selectedReport.avgQualityPct != null && (
+                        <View style={[reportStyles.statBox, { borderColor: COLORS.gold + '44' }]}>
+                          <Text style={[reportStyles.statBoxVal, { color: COLORS.gold }]}>{selectedReport.avgQualityPct}%</Text>
+                          <Text style={reportStyles.statBoxLabel}>✨ Form Quality</Text>
+                        </View>
+                      )}
+                      {selectedReport.paceRepsPerMin != null && (
+                        <View style={[reportStyles.statBox, { borderColor: COLORS.blue + '44' }]}>
+                          <Text style={[reportStyles.statBoxVal, { color: COLORS.blue }]}>{selectedReport.paceRepsPerMin}</Text>
+                          <Text style={reportStyles.statBoxLabel}>⚡ Reps / Min</Text>
+                        </View>
+                      )}
+                      {selectedReport.consistencyPct != null && (
+                        <View style={[reportStyles.statBox, { borderColor: COLORS.green + '44' }]}>
+                          <Text style={[reportStyles.statBoxVal, { color: COLORS.green }]}>{selectedReport.consistencyPct}%</Text>
+                          <Text style={reportStyles.statBoxLabel}>📊 Consistency</Text>
+                        </View>
+                      )}
+                      {selectedReport.bestStreak != null && (
+                        <View style={[reportStyles.statBox, { borderColor: COLORS.red + '44' }]}>
+                          <Text style={[reportStyles.statBoxVal, { color: COLORS.red }]}>{selectedReport.bestStreak}</Text>
+                          <Text style={reportStyles.statBoxLabel}>🔥 Best Streak</Text>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                )}
+
+                {/* Video, if one was submitted */}
+                {selectedReport.recordingUrl && (
+                  <TouchableOpacity
+                    style={reportStyles.videoBtn}
+                    onPress={() => Linking.openURL(selectedReport.recordingUrl)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="play-circle" size={20} color={COLORS.white} />
+                    <Text style={reportStyles.videoBtnText}>Watch Submitted Video</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -925,4 +1026,14 @@ const styles = StyleSheet.create({
   certFileName:     { fontSize: 13, color: COLORS.blue, fontWeight: '600', textAlign: 'center' },
   openCertBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.blue, borderRadius: 12, height: 50 },
   openCertBtnText:  { color: COLORS.white, fontSize: 14, fontWeight: '800' },
+});
+
+const reportStyles = StyleSheet.create({
+  statsGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
+  statBox:        { flexBasis: '47%', flexGrow: 1, backgroundColor: COLORS.inputBg, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, paddingVertical: 16, alignItems: 'center', gap: 4 },
+  statBoxVal:     { fontSize: 22, fontWeight: '900', color: COLORS.white },
+  statBoxLabel:   { fontSize: 11, color: COLORS.gray, fontWeight: '700' },
+  breakdownTitle: { fontSize: 13, fontWeight: '800', color: COLORS.white, marginTop: 22, marginBottom: 2 },
+  videoBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.blue, borderRadius: 12, height: 50, marginTop: 20 },
+  videoBtnText:   { color: COLORS.white, fontSize: 14, fontWeight: '800' },
 });
