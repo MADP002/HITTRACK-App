@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { isClassActive } from '../../lib/classLifecycle';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -210,12 +211,15 @@ export default function HomeScreen() {
   // Live classes
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'classes'), snap => {
-      const list = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = all
+        .filter(isClassActive) // hide classes that have ended or already passed
         .sort((a, b) => {
           const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
           return days.indexOf(a.day) - days.indexOf(b.day);
         });
+      console.log(`[ClassesFilter] total=${all.length} active=${list.length}`);
+      all.forEach(c => console.log(`[ClassesFilter] "${c.name}" status=${c.status} day=${c.day} time=${c.time} -> active=${isClassActive(c)}`));
       setClasses(list);
     }, console.error);
     return () => unsub();

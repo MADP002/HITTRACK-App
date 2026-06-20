@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
@@ -46,14 +47,20 @@ export default function ClientsScreen() {
           const ss = await getDoc(doc(db, 'stats', d.id));
           if (ss.exists()) stats = ss.data();
         } catch (_) {}
-        list.push({ uid: d.id, ...data, ...stats });
+        // data (users doc) spread LAST so it wins on key collisions
+        list.push({ uid: d.id, ...stats, ...data });
       }
       setMembers(list);
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { loadMembers(); }, []);
+  // Refetches every time this screen comes back into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadMembers();
+    }, [loadMembers])
+  );
  
   const filtered = members.filter(m =>
     !searchQ || m.name?.toLowerCase().includes(searchQ.toLowerCase())

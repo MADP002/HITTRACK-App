@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAPok5DAhoG4iOT-jiRsAseAx-ZCwj8YC8",
@@ -14,10 +15,14 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Auth service
-export const auth = getAuth(app);
+// Auth service — persisted to AsyncStorage so the login session survives
+// app restarts and reloads, instead of resetting to memory-only each time.
+// This also closes the brief "not authenticated yet" window right after
+// a reload that was causing occasional "missing or insufficient
+// permissions" errors on the very first Firestore request.
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
 
 // Firestore service
 export const db = getFirestore(app);
-
-

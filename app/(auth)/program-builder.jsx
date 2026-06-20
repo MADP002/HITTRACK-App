@@ -189,16 +189,19 @@ export default function ProgramBuilder() {
         // Save full profile to Firestore
         await setDoc(doc(db, 'users', user.uid), profile, { merge: true });
 
-        // Create initial stats doc so member appears on leaderboard
+        // Create initial stats doc so member appears on leaderboard.
+        // Deliberately NOT setting totalWorkouts/streak/weeklyPct here —
+        // training-complete.jsx is the single source of truth for those.
+        // If this screen ever runs again for an existing member (program
+        // regenerated, etc.), it must never wipe their real progress back
+        // to zero. Every read site already falls back to 0 safely when
+        // these fields are simply absent.
         await setDoc(doc(db, 'stats', user.uid), {
           uid:           user.uid,
           name:          profile.name,
           goal:          profile.goal,
           experience:    profile.experience,
           currentLevel:  profile.experience,
-          totalWorkouts: 0,
-          streak:        0,
-          weeklyPct:     0,
           updatedAt:     new Date().toISOString(),
         }, { merge: true });
 

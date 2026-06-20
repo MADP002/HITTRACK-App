@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
@@ -302,7 +303,10 @@ export default function LeaderboardScreen() {
           if (ss.exists()) stats = ss.data();
         } catch (e) {}
 
-        const merged      = { uid: ud.id, ...userData, ...stats };
+        // userData spread LAST so its fields win on any key collision —
+        // it's the source training-complete.jsx unconditionally updates
+        // every session, so it can never lag behind stats.
+        const merged      = { uid: ud.id, ...stats, ...userData };
         const rawLevel    = userData.experience || stats.experience || userData.currentLevel || 'Beginner';
         const validLevel  = ['Beginner', 'Intermediate', 'Advanced'].includes(rawLevel) ? rawLevel : 'Beginner';
         merged.experience    = validLevel;
@@ -327,7 +331,14 @@ export default function LeaderboardScreen() {
     }
   }, []);
 
-  useEffect(() => { loadLeaderboard(); }, []);
+  // Refetches every time this screen comes back into focus, not just on
+  // first mount — so a member's updated score/streak/progress shows up
+  // immediately on return, instead of only on the very first visit.
+  useFocusEffect(
+    useCallback(() => {
+      loadLeaderboard();
+    }, [loadLeaderboard])
+  );
 
   const onRefresh = () => { setRefreshing(true); loadLeaderboard(); };
 

@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
@@ -62,7 +63,12 @@ export default function ClassesScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
  
-  useEffect(() => { loadClasses(); }, []);
+  // Refetches every time this screen comes back into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadClasses();
+    }, [loadClasses])
+  );
 
   // Live bookings stream
   useEffect(() => {

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { auth, db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -169,24 +170,32 @@ export default function AchievementsScreen() {
   const [showOnly,  setShowOnly]  = useState('all');
 
   // ── Load data ───────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+  // Refetches every time this screen comes back into focus, not just on
+  // first mount — otherwise newly-unlocked achievements and updated XP
+  // never show up after the first visit since the tab stays mounted.
+  useFocusEffect(
+    React.useCallback(() => {
+      const user = auth.currentUser;
+      if (!user) return;
 
-    Promise.all([
-      getDoc(doc(db, 'users', user.uid)),
-      getDoc(doc(db, 'stats', user.uid)),
-    ]).then(([userSnap, statsSnap]) => {
-      if (userSnap.exists())  setUserData(userSnap.data());
-      if (statsSnap.exists()) setStatsData(statsSnap.data());
-    }).catch(console.error).finally(() => setLoading(false));
-  }, []);
+      Promise.all([
+        getDoc(doc(db, 'users', user.uid)),
+        getDoc(doc(db, 'stats', user.uid)),
+      ]).then(([userSnap, statsSnap]) => {
+        if (userSnap.exists())  setUserData(userSnap.data());
+        if (statsSnap.exists()) setStatsData(statsSnap.data());
+      }).catch(console.error).finally(() => setLoading(false));
+    }, [])
+  );
 
   // ── Derived stats ────────────────────────────────────────────────────────────
-  const totalWorkouts = statsData?.totalWorkouts ?? userData?.totalWorkouts ?? 0;
-  const streak        = statsData?.streak        ?? userData?.streak        ?? 0;
-  const weeklyPct     = statsData?.weeklyPct     ?? userData?.weeklyPct     ?? 0;
-  const currentLevel  = statsData?.currentLevel  ?? userData?.experience    ?? 'Beginner';
+  // userData is the priority source — training-complete.jsx unconditionally
+  // updates it every single session, so it can never lag behind. statsData
+  // is only a fallback for fields userData might not have.
+  const totalWorkouts = userData?.totalWorkouts ?? statsData?.totalWorkouts ?? 0;
+  const streak        = userData?.streak        ?? statsData?.streak        ?? 0;
+  const weeklyPct     = userData?.weeklyPct     ?? statsData?.weeklyPct     ?? 0;
+  const currentLevel  = userData?.experience    ?? statsData?.currentLevel  ?? 'Beginner';
   const rank          = calcRank(totalWorkouts, streak, weeklyPct, currentLevel);
   const firstName     = (userData?.name || 'Athlete').split(' ')[0];
 

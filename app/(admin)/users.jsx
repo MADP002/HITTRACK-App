@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import {
@@ -66,7 +67,9 @@ export default function AdminUsersScreen() {
         if (data.role === 'member') {
           let stats = {};
           try { const ss = await getDoc(doc(db, 'stats', d.id)); if (ss.exists()) stats = ss.data(); } catch (_) {}
-          mems.push({ uid: d.id, ...data, ...stats });
+          // data (users doc) spread LAST so it wins on key collisions —
+          // it's unconditionally updated every session by training-complete.jsx
+          mems.push({ uid: d.id, ...stats, ...data });
         } else if (data.role === 'coach') {
           coachs.push({ uid: d.id, ...data });
         } else if (data.role === 'coach_pending') {
@@ -80,7 +83,13 @@ export default function AdminUsersScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { loadUsers(); }, []);
+  // Refetches every time this screen comes back into focus, not just on
+  // first mount — so member stats and class data stay current.
+  useFocusEffect(
+    useCallback(() => {
+      loadUsers();
+    }, [loadUsers])
+  );
 
   // Live messages for selected member
   useEffect(() => {

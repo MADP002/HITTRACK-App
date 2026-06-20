@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -58,7 +59,8 @@ export default function AdminOverviewScreen() {
         if (data.role === 'member') {
           let stats = {};
           try { const ss = await getDoc(doc(db, 'stats', d.id)); if (ss.exists()) stats = ss.data(); } catch (_) {}
-          mems.push({ uid: d.id, ...data, ...stats });
+          // data (users doc) spread LAST so it wins on key collisions
+          mems.push({ uid: d.id, ...stats, ...data });
         } else if (data.role === 'coach' || data.role === 'coach_pending') {
           coachs.push({ uid: d.id, ...data });
         }
@@ -71,7 +73,13 @@ export default function AdminOverviewScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { loadData(); }, []);
+  // Refetches every time this screen comes back into focus — this is also
+  // what fixes the classes count, since it re-runs the classes query too.
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   // Live activity feed
   useEffect(() => {
