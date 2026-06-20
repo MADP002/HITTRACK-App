@@ -16,8 +16,8 @@ const C = {
 
 const COACHES = [
   {
-    name: 'Coach Rafael Labordo', role: 'Head Coach · 12 Years Experience',
-    initial: 'RL', specialty: 'Combination Work · Defense Strategy',
+    name: 'Coach Rafael Labordo', role: 'Head Coach · 16 Years Experience',
+    initial: 'RL', specialty: 'Boxing · Muay Thai',
     color: '#e84a2f', students: 24, wins: 38,
     quote: 'Boxing is chess with your fists. Every move is calculated.',
   },
@@ -37,10 +37,10 @@ const VALUES = [
 ];
 
 const GYM_STATS = [
-  { val: '5+',  label: 'Years Running',  icon: '📅' },
+  { val: '8+',  label: 'Years Running',  icon: '📅' },
   { val: '40+', label: 'Active Members', icon: '👊' },
   { val: '2',   label: 'Expert Coaches', icon: '🥊' },
-  { val: '10+', label: 'Class Types',    icon: '📋' },
+  { val: '4', label: 'Class Types',    icon: '📋' },
 ];
 
 const OFFERINGS = [
@@ -54,8 +54,8 @@ const OFFERINGS = [
 
 const CONTACT = [
   { icon: '📍', label: 'Location', val: 'Wild Bout Boxing Gym, Metro Manila, Philippines' },
-  { icon: '📞', label: 'Phone',    val: '+63 900 000 0000' },
-  { icon: '📧', label: 'Email',    val: 'wildbout@boxing.ph' },
+  { icon: '📞', label: 'Phone',    val: '+63 927 365 9145' },
+  { icon: '📧', label: 'Email',    val: 'wildbouthittrack@gmail.com' },
   { icon: '🕐', label: 'Hours',   val: 'Mon–Sat: 6:00 AM – 9:00 PM' },
 ];
 

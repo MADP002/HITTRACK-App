@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
    Animated, PanResponder, Modal, Dimensions,
-  ActivityIndicator,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -114,6 +114,9 @@ export default function HomeScreen() {
   const [viewedIds,         setViewedIds]         = useState(new Set());
   const [showClasses,       setShowClasses]       = useState(false);
   const [classes,           setClasses]           = useState([]);
+  const [feedback,          setFeedback]           = useState([]);
+  const [expandedFbId,      setExpandedFbId]       = useState(null);
+  const [showHiddenFb,      setShowHiddenFb]       = useState(false);
   const [myBookings,        setMyBookings]        = useState([]);
   const [enrollingId,       setEnrollingId]       = useState(null);
   const [tipIndex,          setTipIndex]          = useState(0);
@@ -207,6 +210,44 @@ export default function HomeScreen() {
     setViewedIds(prev => new Set([...prev, id]));
   };
 
+
+  // Live coach feedback for this member
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const q = query(collection(db, 'feedback'), where('memberId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const list = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(fb => !fb.deletedByMember) // deleted-by-member items never reappear here
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setFeedback(list);
+    }, console.error);
+    return () => unsub();
+  }, []);
+
+  const toggleHideFeedback = async (fb) => {
+    try {
+      await updateDoc(doc(db, 'feedback', fb.id), { hidden: !fb.hidden });
+    } catch (e) { console.error('Could not toggle feedback visibility:', e); }
+  };
+
+  const deleteFeedbackForMember = (fb) => {
+    Alert.alert(
+      'Delete Feedback?',
+      'This removes it from your view only — your coach will still see it in their records.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try { await updateDoc(doc(db, 'feedback', fb.id), { deletedByMember: true }); }
+            catch (e) { console.error('Could not delete feedback:', e); }
+          },
+        },
+      ]
+    );
+  };
 
   // Live classes
   useEffect(() => {
@@ -506,6 +547,81 @@ export default function HomeScreen() {
             ))}
           </View>
         </View>
+
+        {/* ── COACH FEEDBACK ── */}
+        {feedback.length > 0 && (
+          <View style={styles.fbCard}>
+            <View style={styles.fbCardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.fbCardTitle}>💬 Coach Feedback</Text>
+                {feedback.filter(f => !f.hidden).length > 0 && (
+                  <View style={styles.fbNotifyBadge}>
+                    <Text style={styles.fbNotifyBadgeText}>{feedback.filter(f => !f.hidden).length}</Text>
+                  </View>
+                )}
+              </View>
+              {feedback.some(f => f.hidden) && (
+                <TouchableOpacity onPress={() => setShowHiddenFb(v => !v)}>
+                  <Text style={styles.fbShowHiddenLink}>
+                    {showHiddenFb ? 'Hide hidden' : `Show hidden (${feedback.filter(f => f.hidden).length})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {feedback
+              .filter(fb => showHiddenFb || !fb.hidden)
+              .map(fb => {
+                const isExpanded = expandedFbId === fb.id;
+                const ts = fb.createdAt?.seconds ? new Date(fb.createdAt.seconds * 1000) : null;
+                return (
+                  <TouchableOpacity
+                    key={fb.id}
+                    style={[styles.fbRow, fb.hidden && { opacity: 0.45 }]}
+                    onPress={() => setExpandedFbId(isExpanded ? null : fb.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.fbRowTop}>
+                      <View style={styles.fbCoachAvatar}>
+                        <Text style={{ fontSize: 13, fontWeight: '900', color: COLORS.gold }}>
+                          {(fb.coachName || 'C')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.fbCoachName, { flex: 1 }]}>{fb.coachName || 'Coach'}</Text>
+                      {fb.rating > 0 && (
+                        <View style={{ flexDirection: 'row', gap: 1 }}>
+                          {[1,2,3,4,5].map(n => (
+                            <Ionicons key={n} name={n <= fb.rating ? 'star' : 'star-outline'} size={11} color={COLORS.gold} />
+                          ))}
+                        </View>
+                      )}
+                      <TouchableOpacity onPress={() => toggleHideFeedback(fb)} style={{ padding: 4 }}>
+                        <Ionicons name={fb.hidden ? 'eye-outline' : 'eye-off-outline'} size={16} color={COLORS.gray} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => deleteFeedbackForMember(fb)} style={{ padding: 4 }}>
+                        <Ionicons name="trash-outline" size={16} color={COLORS.red} />
+                      </TouchableOpacity>
+                    </View>
+                    {isExpanded && (
+                      <>
+                        <Text style={styles.fbText}>{fb.text}</Text>
+                        {fb.workoutExercises?.length > 0 && (
+                          <View style={styles.fbExerciseTags}>
+                            {fb.workoutExercises.map((ex, i) => (
+                              <View key={i} style={styles.fbExerciseTag}>
+                                <Text style={styles.fbExerciseTagText}>{ex}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </>
+                    )}
+                    <Text style={styles.fbExpandHint}>{isExpanded ? '▲ Show less' : '▼ Tap to expand'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </View>
+        )}
 
         {/* ── BOXING TIPS FLASHCARD ── */}
         <View style={{ gap: 12, paddingBottom: 8 }}>
@@ -837,4 +953,22 @@ const styles = StyleSheet.create({
   enrollBtnJoin: { backgroundColor: '#42a5f5' },
   enrollBtnLeave:{ backgroundColor: '#1a2a1a', borderWidth: 1, borderColor: '#4ade8055' },
   enrollBtnText: { fontSize: 13, fontWeight: '800', color: COLORS.white },
+
+  // Coach Feedback card
+  fbCard:       { backgroundColor: COLORS.card, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, padding: 16, gap: 12, marginBottom: 4 },
+  fbCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fbCardTitle:  { fontSize: 15, fontWeight: '900', color: COLORS.white },
+  fbNotifyBadge: { minWidth: 18, height: 18, borderRadius: 9, backgroundColor: COLORS.red, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  fbNotifyBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
+  fbShowHiddenLink: { fontSize: 11, fontWeight: '700', color: COLORS.gold },
+  fbRow:        { backgroundColor: COLORS.inputBg, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 12, gap: 8 },
+  fbRowTop:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fbCoachAvatar:{ width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.gold + '22', justifyContent: 'center', alignItems: 'center' },
+  fbCoachName:  { fontSize: 13, fontWeight: '800', color: COLORS.white },
+  fbMeta:       { fontSize: 10, color: COLORS.gray, marginTop: 1 },
+  fbText:       { fontSize: 13, color: COLORS.lightGray, lineHeight: 19 },
+  fbExerciseTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
+  fbExerciseTag:  { backgroundColor: COLORS.bg, borderRadius: 50, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 9, paddingVertical: 3 },
+  fbExerciseTagText: { fontSize: 10, color: COLORS.gray, fontWeight: '600' },
+  fbExpandHint: { fontSize: 10, color: COLORS.gold, fontWeight: '700' },
 });
