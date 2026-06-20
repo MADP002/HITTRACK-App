@@ -12,7 +12,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getRequiredReps } from '../../lib/trainingPrograms';
 import { loadPoseModel, detectPoseFromPhoto } from '../../lib/poseDetection';
 import { createDetector } from '../../lib/moveDetector';
-import { playSuccessSound } from '../../lib/sounds';
+import { playSuccessSound, speakEncouragement } from '../../lib/sounds';
 
 const C = {
   bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
@@ -173,6 +173,7 @@ export default function TrainingCameraScreen() {
           setReps(repsRef.current);
           triggerFeedback();
           playSuccessSound();
+          speakEncouragement();
           if (repsRef.current >= requiredRepsRef.current) {
             isProcessingRef.current = false;
             finishSession('completed');
@@ -229,6 +230,8 @@ export default function TrainingCameraScreen() {
       ? Math.round((Date.now() - startTimeRef.current) / 1000)
       : 0;
 
+    const summary = detectorRef.current?.getSessionSummary();
+
     router.replace({
       pathname: '/(member)/training-complete',
       params: {
@@ -238,6 +241,10 @@ export default function TrainingCameraScreen() {
         requiredReps: requiredRepsRef.current,
         duration,
         trainingName: trainingRef.current?.name,
+        avgQualityPct:    summary?.avgQualityPct ?? '',
+        paceRepsPerMin:   summary?.paceRepsPerMin ?? '',
+        consistencyPct:   summary?.consistencyPct ?? '',
+        bestStreak:       summary?.bestStreak ?? '',
       },
     });
   };

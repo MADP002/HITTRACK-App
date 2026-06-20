@@ -651,6 +651,14 @@ export default function MemberDetailScreen() {
                       <Text style={styles.recordingDot}>·</Text>
                       <Text style={styles.recordingReps}>{rec.properReps || 0} proper reps</Text>
                     </View>
+                    {(rec.avgQualityPct != null || rec.paceRepsPerMin != null || rec.consistencyPct != null || rec.bestStreak != null) && (
+                      <View style={styles.perfBadgeRow}>
+                        {rec.avgQualityPct  != null && <View style={styles.perfBadge}><Text style={styles.perfBadgeText}>✨ {rec.avgQualityPct}% form</Text></View>}
+                        {rec.paceRepsPerMin != null && <View style={styles.perfBadge}><Text style={styles.perfBadgeText}>⚡ {rec.paceRepsPerMin}/min</Text></View>}
+                        {rec.consistencyPct != null && <View style={styles.perfBadge}><Text style={styles.perfBadgeText}>📊 {rec.consistencyPct}% steady</Text></View>}
+                        {rec.bestStreak     != null && <View style={styles.perfBadge}><Text style={styles.perfBadgeText}>🔥 {rec.bestStreak} streak</Text></View>}
+                      </View>
+                    )}
                     {ts && <Text style={styles.recordingDate}>{ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>}
                   </View>
                   {!rec.viewed && <View style={styles.unviewedDot} />}
@@ -898,6 +906,9 @@ const styles = StyleSheet.create({
   recordingDot:  { fontSize: 10, color: COLORS.gray },
   recordingReps: { fontSize: 10, color: COLORS.gray },
   recordingDate: { fontSize: 10, color: COLORS.gray },
+  perfBadgeRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 2 },
+  perfBadge:     { backgroundColor: COLORS.inputBg, borderRadius: 50, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 8, paddingVertical: 3 },
+  perfBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.lightGray },
   unviewedDot:   { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.red },
   newBadge:      { backgroundColor: COLORS.blue + '22', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.blue + '44' },
   newBadgeText:  { fontSize: 9, fontWeight: '800', color: COLORS.blue },

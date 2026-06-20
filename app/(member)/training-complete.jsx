@@ -166,6 +166,7 @@ export default function TrainingCompleteScreen() {
     duration:    durationParam,
     recordingUri,
     trainingName,
+    avgQualityPct, paceRepsPerMin, consistencyPct, bestStreak,
   } = useLocalSearchParams();
 
   const properReps   = parseInt(properRepsParam  || '0',  10);
@@ -268,6 +269,14 @@ export default function TrainingCompleteScreen() {
         properReps,
         duration,
         recordingUrl,
+        // Performance breakdown — derived from real per-rep data captured
+        // during the session, not estimates. Blank string params (when a
+        // metric couldn't be computed, e.g. only 1 rep total) are
+        // normalized to null rather than saved as empty strings.
+        avgQualityPct:  avgQualityPct  !== '' ? Number(avgQualityPct)  : null,
+        paceRepsPerMin: paceRepsPerMin !== '' ? Number(paceRepsPerMin) : null,
+        consistencyPct: consistencyPct !== '' ? Number(consistencyPct) : null,
+        bestStreak:     bestStreak     !== '' ? Number(bestStreak)     : null,
         submittedAt:  serverTimestamp(),
         viewed:       false,
       });
@@ -338,6 +347,27 @@ export default function TrainingCompleteScreen() {
               ))}
             </View>
           </View>
+
+          {/* ── PERFORMANCE BREAKDOWN ── */}
+          {avgQualityPct !== '' && (
+            <View style={s.statsCard}>
+              <Text style={s.statsTitle}>Performance Breakdown</Text>
+              <View style={s.statsRow}>
+                {[
+                  avgQualityPct  !== '' && { icon: '✨', label: 'Form Quality',  val: `${avgQualityPct}%`,  color: C.gold },
+                  paceRepsPerMin !== '' && { icon: '⚡', label: 'Pace',          val: `${paceRepsPerMin}/min`, color: C.blue },
+                  consistencyPct !== '' && { icon: '📊', label: 'Consistency',  val: `${consistencyPct}%`, color: C.green },
+                  bestStreak     !== '' && { icon: '🔥', label: 'Best Streak',  val: bestStreak,           color: C.red },
+                ].filter(Boolean).map((st, i) => (
+                  <View key={i} style={[s.statItem, { borderColor: st.color + '33' }]}>
+                    <Text style={{ fontSize: 22 }}>{st.icon}</Text>
+                    <Text style={[s.statVal, { color: st.color }]}>{st.val}</Text>
+                    <Text style={s.statLabel}>{st.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* ── RECORDING SUBMISSION ── */}
           {!submitted ? (
