@@ -12,7 +12,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getRequiredReps } from '../../lib/trainingPrograms';
 import { loadPoseModel, detectPoseFromPhoto } from '../../lib/poseDetection';
 import { createDetector } from '../../lib/moveDetector';
-import { playSuccessSound, speakEncouragement } from '../../lib/sounds';
+import { playSuccessSound, speakEncouragement, ENCOURAGEMENT_PHRASES } from '../../lib/sounds';
 
 const C = {
   bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
@@ -21,9 +21,10 @@ const C = {
   lightGray: '#CCCCCC', blue: '#42a5f5', purple: '#c084fc',
 };
 
-const CAPTURE_INTERVAL_MS = 150;   // floor between captures — real cadence is paced by device speed
+const CAPTURE_INTERVAL_MS = 60;    // floor between captures — real cadence is paced by device speed
 const SAFETY_MAX_DURATION_SEC = 1800; // 30 min battery-safety net only, not a real workout timer
-const FEEDBACK_PHRASES = ['OUTSTANDING!', 'PERFECT!', 'WELL DONE!', 'IMPECCABLE!', "THAT'S IT!", 'CLEAN!'];
+// FEEDBACK_PHRASES removed — now sourced from lib/sounds.js so the on-screen
+// text and the spoken voice always say the exact same thing per rep.
 
 export default function TrainingCameraScreen() {
   const router = useRouter();
@@ -146,8 +147,7 @@ export default function TrainingCameraScreen() {
   }, []);
 
   // ── Visual feedback flash on a completed rep ─────────────────────────
-  const triggerFeedback = useCallback(() => {
-    const phrase = FEEDBACK_PHRASES[Math.floor(Math.random() * FEEDBACK_PHRASES.length)];
+  const triggerFeedback = useCallback((phrase) => {
     setFeedbackText(phrase);
     flashAnim.setValue(1);
     Animated.timing(flashAnim, { toValue: 0, duration: 700, useNativeDriver: true }).start();
@@ -164,17 +164,25 @@ export default function TrainingCameraScreen() {
     try {
       if (cameraRef.current) {
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.3, skipProcessing: true, base64: false, shutterSound: false,
+          quality: 0.15, skipProcessing: true, base64: false, shutterSound: false,
         });
         const keypoints = await detectPoseFromPhoto(photo.uri);
         const repCompleted = detectorRef.current?.update(keypoints);
         if (repCompleted) {
           repsRef.current += 1;
           setReps(repsRef.current);
-          triggerFeedback();
-          playSuccessSound();
-          speakEncouragement();
-          if (repsRef.current >= requiredRepsRef.current) {
+          const isLastRep = repsRef.current >= requiredRepsRef.current;
+
+          // Feedback effects are wrapped individually and never allowed to
+          // block session completion — if a sound call throws (e.g. a
+          // native module not yet present in the current build), the rep
+          // count and finish check must still proceed normally.
+          const phrase = ENCOURAGEMENT_PHRASES[Math.floor(Math.random() * ENCOURAGEMENT_PHRASES.length)];
+          try { triggerFeedback(phrase); } catch (e) { console.warn('[TrainingCamera] feedback flash error:', e); }
+          try { playSuccessSound(); } catch (e) { console.warn('[TrainingCamera] chime error:', e); }
+          try { speakEncouragement(phrase); } catch (e) { console.warn('[TrainingCamera] speech error:', e); }
+
+          if (isLastRep) {
             isProcessingRef.current = false;
             finishSession('completed');
             return;
