@@ -28,27 +28,39 @@ const C = {
 // ── Save session + mark training complete in Firestore ────────────
 async function completeTraining({ uid, trainingId, level, properReps, duration }) {
   try {
+    console.log(`[completeTraining] called with trainingId="${trainingId}" level="${level}" properReps=${properReps}`);
     const workRef  = doc(db, 'workouts', uid);
     const workSnap = await getDoc(workRef);
-    if (!workSnap.exists()) return { leveledUp: false };
+    if (!workSnap.exists()) { console.log('[completeTraining] workouts doc does not exist!'); return { leveledUp: false }; }
 
     const data    = workSnap.data();
     const program = data.trainingProgram ? [...data.trainingProgram] : [];
+    console.log(`[completeTraining] program has ${program.length} trainings. ids:`, program.map(t => t.id));
 
     // Mark this training as completed at this level
     const idx = program.findIndex(t => t.id === trainingId);
+    console.log(`[completeTraining] findIndex result: idx=${idx}`);
     if (idx !== -1) {
       const completed = program[idx].completedLevels || [];
+      console.log(`[completeTraining] existing completedLevels for "${trainingId}":`, completed);
       if (!completed.includes(level)) {
         program[idx] = {
           ...program[idx],
           completedLevels: [...completed, level],
         };
+        console.log(`[completeTraining] added "${level}" to completedLevels — now:`, program[idx].completedLevels);
+      } else {
+        console.log(`[completeTraining] level "${level}" was ALREADY in completedLevels — no change made`);
       }
       // Unlock next training
       if (idx + 1 < program.length) {
         program[idx + 1] = { ...program[idx + 1], unlocked: true };
+        console.log(`[completeTraining] unlocked next training: "${program[idx + 1].id}"`);
+      } else {
+        console.log('[completeTraining] this was the LAST training in the program — nothing to unlock');
       }
+    } else {
+      console.log(`[completeTraining] !!! trainingId "${trainingId}" was NOT FOUND in the program — nothing was marked complete or unlocked !!!`);
     }
 
     // Check if all trainings are complete at this level

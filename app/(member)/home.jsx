@@ -259,8 +259,7 @@ export default function HomeScreen() {
           const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
           return days.indexOf(a.day) - days.indexOf(b.day);
         });
-      console.log(`[ClassesFilter] total=${all.length} active=${list.length}`);
-      all.forEach(c => console.log(`[ClassesFilter] "${c.name}" status=${c.status} day=${c.day} time=${c.time} -> active=${isClassActive(c)}`));
+      // (verbose per-class diagnostic logging removed — confirmed working)
       setClasses(list);
     }, console.error);
     return () => unsub();

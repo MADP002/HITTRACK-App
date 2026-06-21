@@ -82,22 +82,16 @@ export default function TrainingLabScreen() {
       }
 
       // Auto-sync: if coach changed the level in users doc but workouts
-      // doc hasn't been updated yet, reconcile them now
-      const expKey = (uData.experience || 'Beginner').toLowerCase();
-      if (level !== expKey && expKey) {
-        const syncedStars = expKey === 'advanced' ? 3 : expKey === 'intermediate' ? 2 : 1;
-        level = expKey;
-        stars = syncedStars;
-        try {
-          const { updateDoc: upd, doc: d } = await import('firebase/firestore');
-          // updateDoc already imported via top-level import — use it directly
-        } catch (_) {}
-        // Update workouts doc to stay in sync
-        setDoc(doc(db, 'workouts', user.uid), {
-          trainingCurrentLevel: expKey,
-          trainingLevelStars:   expKey === 'advanced' ? 3 : expKey === 'intermediate' ? 2 : 1,
-        }, { merge: true }).catch(() => {});
-      }
+      // NOTE: previously had auto-sync logic here comparing trainingCurrentLevel
+      // against users.experience (the static onboarding selection) and
+      // overwriting one to match the other. Removed — that field is just
+      // the member's self-reported starting level from signup and never
+      // changes through normal training, while trainingCurrentLevel is the
+      // real progression tracker that advances as movements get completed.
+      // Comparing them caused genuine level-ups to get silently reverted.
+      // Coach-initiated level changes already write trainingCurrentLevel
+      // directly in member-detail.jsx, so workouts/{uid} is the single
+      // source of truth here and shouldn't be second-guessed.
 
       setTrainings(program);
       setCurrentLevel(level);
