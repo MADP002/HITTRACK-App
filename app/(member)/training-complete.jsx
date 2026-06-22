@@ -37,6 +37,15 @@ async function completeTraining({ uid, trainingId, level, properReps, duration }
     const program = data.trainingProgram ? [...data.trainingProgram] : [];
     console.log(`[completeTraining] program has ${program.length} trainings. ids:`, program.map(t => t.id));
 
+    // SAFETY GUARD: never proceed if the read came back with an empty/missing
+    // program. Writing back an empty array here would silently wipe every
+    // completed level for the member — better to fail loudly and skip the
+    // write than risk destroying real progress on a transient bad read.
+    if (program.length === 0) {
+      console.error('[completeTraining] !!! trainingProgram was empty on read — ABORTING to avoid wiping progress. This training will not be marked complete; please retry. !!!');
+      return { leveledUp: false };
+    }
+
     // Mark this training as completed at this level
     const idx = program.findIndex(t => t.id === trainingId);
     console.log(`[completeTraining] findIndex result: idx=${idx}`);
@@ -201,8 +210,13 @@ export default function TrainingCompleteScreen() {
   const cardOpacity  = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(40)).current;
 
+  // Guard so completeTraining only ever fires once per screen visit,
+  // even though the useEffect now watches [trainingId, level] deps and
+  // could re-run if Expo Router delivers params in two renders.
+  const hasCompletedRef = useRef(false);
+
+  // Entrance animation — runs once on mount, independent of params.
   useEffect(() => {
-    // Animate entrance
     Animated.sequence([
       Animated.parallel([
         Animated.timing(titleOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
@@ -213,10 +227,29 @@ export default function TrainingCompleteScreen() {
         Animated.timing(cardTranslateY,  { toValue: 0, duration: 500, useNativeDriver: true }),
       ]),
     ]).start();
+  }, []);
 
+  useEffect(() => {
     // Save training progress + load coaches
     const user = auth.currentUser;
     if (!user) return;
+
+    // Guard: Expo Router can return undefined on the very first synchronous
+    // render before params are hydrated. If trainingId or level is missing
+    // here, completeTraining's findIndex will return -1 and silently skip
+    // marking the training complete. Bail out — the useEffect that watches
+    // [trainingId, level] below will re-run once the params resolve.
+    if (!trainingId || !level) {
+      console.warn(`[TrainingComplete] params not ready yet — trainingId="${trainingId}" level="${level}" — skipping completeTraining, will retry when params resolve`);
+      setSaving(false);
+      return;
+    }
+
+    // Prevent double-fire: if params arrive across two renders (first render
+    // undefined, second render with real values), the dep-array change would
+    // trigger a second run. hasCompletedRef ensures we only save once.
+    if (hasCompletedRef.current) return;
+    hasCompletedRef.current = true;
 
     Promise.all([
       completeTraining({ uid: user.uid, trainingId, level, properReps, duration }),
@@ -231,7 +264,7 @@ export default function TrainingCompleteScreen() {
       setCoaches(coachs);
       setSaving(false);
     });
-  }, []);
+  }, [trainingId, level]);
 
   const handleSubmitRecording = async () => {
     if (!selectedCoach) {

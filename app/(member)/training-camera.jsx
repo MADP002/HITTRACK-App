@@ -52,11 +52,22 @@ export default function TrainingCameraScreen() {
   const loopTimeoutRef   = useRef(null);
   const timerIntervalRef = useRef(null);
   const startTimeRef     = useRef(null);
+  // trainingIdRef mirrors the route param so finishSession always has the
+  // correct id even when called from inside a stale useCallback closure.
+  // Without this, finishSession captured via runCaptureLoop's closure reads
+  // the trainingId value from the render in which runCaptureLoop was created,
+  // which can be undefined on first render before params are parsed.
+  const trainingIdRef   = useRef(trainingId);
+  // levelRef mirrors level for the same reason — finishSession passes it to
+  // training-complete, and must always have the current value, not a stale one.
+  const levelRef        = useRef(level);
 
   const flashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { requiredRepsRef.current = requiredReps; }, [requiredReps]);
+  useEffect(() => { trainingIdRef.current = trainingId; }, [trainingId]);
+  useEffect(() => { levelRef.current = level; }, [level]);
 
   // ── Full reset every time this screen gains focus ─────────────────────
   // When the user exits mid-session and returns to the same training,
@@ -77,6 +88,13 @@ export default function TrainingCameraScreen() {
       // previous visit, go straight to 'ready' so the user sees the
       // "Get In Position" screen immediately. If it's a fresh mount and
       // the data hasn't arrived yet, keep 'loading' so the fetch can run.
+      // IMPORTANT: do NOT set trainingRef.current = null here. The useEffect
+      // that populates trainingRef only re-runs when [trainingId, level] deps
+      // change — on a second visit to the same training those deps are
+      // identical, so the effect doesn't re-fire. Nulling the ref here leaves
+      // trainingRef empty for the whole second session and causes finishSession
+      // to pass trainingId=undefined, making completeTraining silently skip
+      // marking the training as complete (findIndex returns -1).
       setPhase(trainingRef.current ? 'ready' : 'loading');
       setReps(0);
       setElapsed(0);
@@ -240,11 +258,18 @@ export default function TrainingCameraScreen() {
 
     const summary = detectorRef.current?.getSessionSummary();
 
+    // trainingIdRef.current is the most reliable source — it's set directly
+    // from the route param and kept in sync via useEffect, so it's never
+    // affected by stale closures in the async capture loop. trainingRef.current?.id
+    // and the raw trainingId param are kept as fallbacks for safety.
+    const resolvedTrainingId = trainingIdRef.current ?? trainingRef.current?.id ?? trainingId;
+    const resolvedLevel      = levelRef.current ?? level;
+
     router.replace({
       pathname: '/(member)/training-complete',
       params: {
-        trainingId: trainingRef.current?.id,
-        level,
+        trainingId: resolvedTrainingId,
+        level:      resolvedLevel,
         properReps: repsRef.current,
         requiredReps: requiredRepsRef.current,
         duration,

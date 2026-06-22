@@ -11,7 +11,7 @@ import { auth, db } from '../../firebase';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
   generateTrainingProgram, getLevelLabel, getLevelStars,
-  getRequiredReps, getTypeInfo,
+  getRequiredReps, getTypeInfo, MOVEMENT_LIBRARY,
 } from '../../lib/trainingPrograms';
 
 const C = {
@@ -33,6 +33,9 @@ export default function TrainingLabScreen() {
   const [refreshing,    setRefreshing]    = useState(false);
   const [userData,      setUserData]      = useState({});
   const [needsCert,     setNeedsCert]     = useState(false);
+  const hasAttemptedGenRef = React.useRef(false);
+
+  const [generating,    setGenerating]    = useState(false);
 
   const loadData = useCallback(async () => {
     const user = auth.currentUser;
@@ -59,27 +62,50 @@ export default function TrainingLabScreen() {
       let level       = workData.trainingCurrentLevel || 'beginner';
       let stars       = workData.trainingLevelStars   || 1;
 
-      // Generate if not yet created (user completed program builder before this update)
-      if (!program || program.length === 0) {
-        const generated = generateTrainingProgram(
-          uData.stance     || 'Orthodox',
-          uData.goal       || 'Learn Boxing',
-          uData.experience || 'Beginner'
-        );
-        program = generated.trainings;
-        level   = generated.currentLevel;
-        stars   = generated.levelStars;
-        await setDoc(doc(db, 'workouts', user.uid), {
-          trainingProgram:         program,
-          trainingCurrentLevel:    level,
-          trainingLevelStars:      stars,
-          trainingCurrentIndex:    0,
-          trainingCompletedLevels: [],
-          trainingGoal:            generated.goal,
-          trainingStance:          generated.stance,
-          trainingGeneratedAt:     generated.generatedAt,
-        }, { merge: true });
+      console.log(`[TrainingLab] loadData fired. program.length=${program.length} level="${level}" hasAttemptedGenRef=${hasAttemptedGenRef.current}`);
+      console.log('[TrainingLab] program ids+completedLevels:', program.map(t => `${t.id}:[${(t.completedLevels||[]).join(',')}]`));
+
+      // ── One-time migration: broad_jump -> knee_raise ──────────────
+      // Replaces any legacy broad_jump entries with the new knee_raise
+      // movement, IN PLACE at the same position in the array, preserving
+      // completedLevels so existing progress isn't lost — only the
+      // movement itself changes, not the member's standing in the program.
+      if (program.some(t => t.id === 'broad_jump')) {
+        console.log('[TrainingLab] MIGRATION FIRING — broad_jump found, replacing with knee_raise');
+        const newMov = MOVEMENT_LIBRARY['knee_raise'];
+        program = program.map(t => {
+          if (t.id !== 'broad_jump' || !newMov) return t;
+          return {
+            ...t,
+            id:          'knee_raise',
+            type:        newMov.type,
+            hand:        newMov.hand,
+            icon:        newMov.icon,
+            color:       newMov.color,
+            detection:   { ...newMov.detection },
+            description: newMov.description,
+            whyUse:      newMov.whyUse,
+            howTo:       newMov.howTo,
+            cameraDistance: newMov.cameraDistance,
+            name:        'Knee Raise',
+            // completedLevels, unlocked, reps/counts etc. all preserved via ...t
+          };
+        });
+        try {
+          await updateDoc(doc(db, 'workouts', user.uid), { trainingProgram: program });
+        } catch (e) { console.warn('[TrainingLab] broad_jump -> knee_raise migration write failed:', e); }
       }
+
+      // NOTE: automatic program regeneration was REMOVED from here entirely.
+      // It previously fired silently whenever the read came back empty —
+      // which happened more than once due to a still-unconfirmed cause,
+      // and each time it silently destroyed real, in-progress completion
+      // data. Rather than keep guessing at the exact trigger condition,
+      // generating a program is now something the member must explicitly
+      // request via a button (see handleGenerateProgram below + the
+      // "No Program Found" empty state in the render). This makes it
+      // structurally impossible for a transient read issue to ever wipe
+      // progress again, regardless of what was actually causing it.
 
       // Auto-sync: if coach changed the level in users doc but workouts
       // NOTE: previously had auto-sync logic here comparing trainingCurrentLevel
@@ -99,6 +125,41 @@ export default function TrainingLabScreen() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
+
+  // Explicit, member-triggered program generation. Only runs when the
+  // member taps the button in the "No Program Found" empty state — never
+  // automatically as a side effect of just loading this screen. This is
+  // the deliberate replacement for the old auto-regeneration, which
+  // silently destroyed real progress more than once for a still-
+  // unconfirmed reason.
+  const handleGenerateProgram = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setGenerating(true);
+    try {
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const uData = userSnap.exists() ? userSnap.data() : {};
+      const generated = generateTrainingProgram(
+        uData.stance     || 'Orthodox',
+        uData.goal       || 'Learn Boxing',
+        uData.experience || 'Beginner'
+      );
+      await setDoc(doc(db, 'workouts', user.uid), {
+        trainingProgram:         generated.trainings,
+        trainingCurrentLevel:    generated.currentLevel,
+        trainingLevelStars:      generated.levelStars,
+        trainingCurrentIndex:    0,
+        trainingCompletedLevels: [],
+        trainingGoal:            generated.goal,
+        trainingStance:          generated.stance,
+        trainingGeneratedAt:     generated.generatedAt,
+      }, { merge: true });
+      await loadData(); // refresh the screen with the new program
+    } catch (e) {
+      console.error('[TrainingLab] manual program generation failed:', e);
+    }
+    setGenerating(false);
+  };
 
   // Reload every time this screen comes back into focus — not just on first
   // mount — since returning from training-complete reuses the existing
@@ -291,7 +352,18 @@ export default function TrainingLabScreen() {
           <View style={s.emptyBox}>
             <Text style={{ fontSize: 56 }}>🥊</Text>
             <Text style={s.emptyTitle}>No Program Found</Text>
-            <Text style={s.emptySub}>Please complete the program builder first to generate your training program.</Text>
+            <Text style={s.emptySub}>Tap below to generate your training program.</Text>
+            <TouchableOpacity
+              style={[s.generateBtn, generating && { opacity: 0.6 }]}
+              onPress={handleGenerateProgram}
+              disabled={generating}
+              activeOpacity={0.85}
+            >
+              {generating
+                ? <ActivityIndicator size="small" color={C.white} />
+                : <Text style={s.generateBtnText}>Generate My Program</Text>
+              }
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -347,6 +419,8 @@ const s = StyleSheet.create({
   emptyBox:  { alignItems: 'center', gap: 12, paddingTop: 40 },
   emptyTitle:{ fontSize: 18, fontWeight: '800', color: C.white },
   emptySub:  { fontSize: 13, color: C.gray, textAlign: 'center', paddingHorizontal: 20 },
+  generateBtn:     { backgroundColor: C.red, borderRadius: 14, paddingHorizontal: 28, height: 50, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  generateBtnText: { color: C.white, fontWeight: '800', fontSize: 14 },
 
   // Medical cert gate card
   certGateCard:       { backgroundColor: C.card, borderRadius: 20, borderWidth: 1.5, borderColor: C.red + '55', padding: 24, alignItems: 'center', gap: 14, marginTop: 8 },
