@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet,  Alert, Linking,
+  View, Text, ScrollView, TouchableOpacity, Image,
+  StyleSheet, Alert, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,14 +18,20 @@ const COACHES = [
   {
     name: 'Coach Rafael Labordo', role: 'Head Coach · 16 Years Experience',
     initial: 'RL', specialty: 'Boxing · Muay Thai',
-    color: '#e84a2f', students: 24, wins: 38,
-    quote: 'Boxing is chess with your fists. Every move is calculated.',
+    color: '#e84a2f',
+    achievement: '2x Awardee of Makati Government Professional Instructor',
+    // Place Coach Rafael's certification photo in assets/coaches/rafael-cert.jpg
+    // then replace the require() path below to match.
+    certImage: require('../../assets/coaches/rafael-cert.png'),
   },
   {
-    name: 'Coach Joey Mendoza', role: 'Assistant Coach · 8 Years Experience',
-    initial: 'JM', specialty: 'Footwork · Conditioning',
-    color: '#f5c842', students: 18, wins: 22,
-    quote: 'Train hard, fight easy. Discipline is the foundation of every champion.',
+    name: 'Coach Michael Labordo', role: 'Assistant Coach · 8 Years Experience',
+    initial: 'ML', specialty: 'Boxing · Conditioning',
+    color: '#f5c842',
+    achievement: '3x URCC Winner',
+    // Place Coach Michael's certification photo in assets/coaches/michael-cert.jpg
+    // then replace the require() path below to match.
+    certImage: require('../../assets/coaches/michael-cert.png'),
   },
 ];
 
@@ -40,7 +46,7 @@ const GYM_STATS = [
   { val: '8+',  label: 'Years Running',  icon: '📅' },
   { val: '40+', label: 'Active Members', icon: '👊' },
   { val: '2',   label: 'Expert Coaches', icon: '🥊' },
-  { val: '4', label: 'Class Types',    icon: '📋' },
+  { val: '4',   label: 'Class Types',    icon: '📋' },
 ];
 
 const OFFERINGS = [
@@ -56,12 +62,11 @@ const CONTACT = [
   { icon: '📍', label: 'Location', val: 'Wild Bout Boxing Gym, Metro Manila, Philippines' },
   { icon: '📞', label: 'Phone',    val: '+63 927 365 9145' },
   { icon: '📧', label: 'Email',    val: 'wildbouthittrack@gmail.com' },
-  { icon: '🕐', label: 'Hours',   val: 'Mon–Sat: 6:00 AM – 9:00 PM' },
+  { icon: '🕐', label: 'Hours',    val: 'Mon–Sun: 6:00 AM – 9:00 PM' },
 ];
 
 export default function AboutUsScreen() {
   const router = useRouter();
- 
 
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
@@ -79,7 +84,7 @@ export default function AboutUsScreen() {
         {/* ── HERO ── */}
         <View style={s.heroCard}>
           <View style={s.heroAccent} />
-          <Text style={s.heroEst}>Est. 2019 · Wild Bout Boxing Gym</Text>
+          <Text style={s.heroEst}>Est. 2018 · Wild Bout Boxing Gym</Text>
           <Text style={s.heroTitle}>WILD BOUT</Text>
           <Text style={s.heroTitleRed}>BOXING GYM</Text>
           <Text style={s.heroTagline}>
@@ -129,7 +134,7 @@ export default function AboutUsScreen() {
               <View key={i} style={[s.coachCard, { borderColor: coach.color + '33' }]}>
                 <View style={[s.coachGlow, { backgroundColor: coach.color + '18' }]} />
 
-                {/* Coach top row */}
+                {/* Coach top row — avatar + name/role/specialty */}
                 <View style={s.coachTop}>
                   <View style={[s.coachAvatar, { borderColor: coach.color, backgroundColor: coach.color + '22' }]}>
                     <Text style={[s.coachAvatarText, { color: coach.color }]}>{coach.initial}</Text>
@@ -137,24 +142,25 @@ export default function AboutUsScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={s.coachName}>{coach.name}</Text>
                     <Text style={[s.coachRole, { color: coach.color }]}>{coach.role}</Text>
-                    {/* Mini stats */}
-                    <View style={s.coachStatsRow}>
-                      {[{ label: 'Students', val: coach.students }, { label: 'Victories', val: coach.wins }].map((st, j) => (
-                        <View key={j} style={[s.coachStat, { backgroundColor: coach.color + '18', borderColor: coach.color + '33' }]}>
-                          <Text style={[s.coachStatVal, { color: coach.color }]}>{st.val}</Text>
-                          <Text style={s.coachStatLabel}>{st.label}</Text>
-                        </View>
-                      ))}
-                    </View>
                     <Text style={s.coachSpecialtyLabel}>Specialty</Text>
                     <Text style={s.coachSpecialty}>{coach.specialty}</Text>
                   </View>
                 </View>
 
-                {/* Quote */}
-                <View style={[s.coachQuoteBox, { borderColor: coach.color + '22' }]}>
-                  <Text style={[s.coachQuoteMark, { color: coach.color }]}>"</Text>
-                  <Text style={s.coachQuote}>{coach.quote}</Text>
+                {/* Achievement badge */}
+                <View style={[s.achievementRow, { borderColor: coach.color + '44', backgroundColor: coach.color + '11' }]}>
+                  <Ionicons name="trophy" size={15} color={coach.color} />
+                  <Text style={[s.achievementText, { color: coach.color }]}>{coach.achievement}</Text>
+                </View>
+
+                {/* Certification photo */}
+                <View style={s.certSection}>
+                  <Text style={s.certLabel}>CERTIFICATION</Text>
+                  <Image
+                    source={coach.certImage}
+                    style={s.certImage}
+                    resizeMode="contain"
+                  />
                 </View>
               </View>
             ))}
@@ -205,17 +211,17 @@ const s = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingBottom: 50, gap: 16 },
 
   // Header
-  header:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
-  backBtn:   { width: 38, height: 38, borderRadius: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center' },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
+  backBtn:     { width: 38, height: 38, borderRadius: 10, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '800', color: C.white },
 
   // Hero
-  heroCard: { backgroundColor: C.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: C.red + '33', marginTop: 14, overflow: 'hidden', alignItems: 'center' },
-  heroAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: C.red },
-  heroEst:    { fontSize: 11, fontWeight: '700', color: C.red, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 },
-  heroTitle:  { fontSize: 48, fontWeight: '900', color: C.white, letterSpacing: 3, lineHeight: 52 },
+  heroCard:     { backgroundColor: C.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: C.red + '33', marginTop: 14, overflow: 'hidden', alignItems: 'center' },
+  heroAccent:   { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: C.red },
+  heroEst:      { fontSize: 11, fontWeight: '700', color: C.red, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 14 },
+  heroTitle:    { fontSize: 48, fontWeight: '900', color: C.white, letterSpacing: 3, lineHeight: 52 },
   heroTitleRed: { fontSize: 48, fontWeight: '900', color: 'transparent', letterSpacing: 3, lineHeight: 56, textDecorationLine: 'none', borderWidth: 2, borderColor: 'transparent', textShadowColor: C.red, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
-  heroTagline:{ fontSize: 13, color: C.gray, lineHeight: 22, textAlign: 'center', marginTop: 14, maxWidth: 300 },
+  heroTagline:  { fontSize: 13, color: C.gray, lineHeight: 22, textAlign: 'center', marginTop: 14, maxWidth: 300 },
 
   // Stats
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -226,33 +232,35 @@ const s = StyleSheet.create({
   // Generic card
   card: { backgroundColor: C.card, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: C.border },
 
-  sectionTag:   { fontSize: 10, fontWeight: '700', color: C.red, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 },
-  sectionTitle: { fontSize: 20, fontWeight: '900', color: C.white, marginBottom: 12 },
+  sectionTag:         { fontSize: 10, fontWeight: '700', color: C.red, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 },
+  sectionTitle:       { fontSize: 20, fontWeight: '900', color: C.white, marginBottom: 12 },
   sectionTitleCenter: { fontSize: 26, fontWeight: '900', color: C.white, marginBottom: 16, textAlign: 'center' },
-  bodyText:     { fontSize: 13, color: C.gray, lineHeight: 22 },
+  bodyText:           { fontSize: 13, color: C.gray, lineHeight: 22 },
 
   // Offerings
-  offeringRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.inputBg, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.red + '18' },
-  offeringDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.red },
-  offeringText:{ fontSize: 13, color: C.white, fontWeight: '500', flex: 1 },
+  offeringRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.inputBg, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.red + '18' },
+  offeringDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: C.red },
+  offeringText: { fontSize: 13, color: C.white, fontWeight: '500', flex: 1 },
 
   // Coaches
-  coachCard:  { backgroundColor: C.card, borderRadius: 20, borderWidth: 1, padding: 18, overflow: 'hidden', position: 'relative' },
-  coachGlow:  { position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50 },
-  coachTop:   { flexDirection: 'row', gap: 14, marginBottom: 14 },
-  coachAvatar:{ width: 70, height: 70, borderRadius: 35, borderWidth: 2.5, justifyContent: 'center', alignItems: 'center' },
-  coachAvatarText: { fontSize: 24, fontWeight: '900' },
-  coachName:  { fontSize: 15, fontWeight: '800', color: C.white, marginBottom: 3 },
-  coachRole:  { fontSize: 11, fontWeight: '600', marginBottom: 10 },
-  coachStatsRow:  { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  coachStat:      { borderRadius: 8, borderWidth: 1, padding: 8, alignItems: 'center', minWidth: 64 },
-  coachStatVal:   { fontSize: 18, fontWeight: '900', lineHeight: 20 },
-  coachStatLabel: { fontSize: 8, color: C.gray, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  coachCard:   { backgroundColor: C.card, borderRadius: 20, borderWidth: 1, padding: 18, overflow: 'hidden', position: 'relative' },
+  coachGlow:   { position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: 50 },
+  coachTop:    { flexDirection: 'row', gap: 14, marginBottom: 14 },
+  coachAvatar: { width: 70, height: 70, borderRadius: 35, borderWidth: 2.5, justifyContent: 'center', alignItems: 'center' },
+  coachAvatarText:     { fontSize: 24, fontWeight: '900' },
+  coachName:           { fontSize: 15, fontWeight: '800', color: C.white, marginBottom: 3 },
+  coachRole:           { fontSize: 11, fontWeight: '600', marginBottom: 10 },
   coachSpecialtyLabel: { fontSize: 9, color: C.gray, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 3 },
   coachSpecialty:      { fontSize: 12, color: C.lightGray },
-  coachQuoteBox:  { backgroundColor: C.inputBg, borderRadius: 12, padding: 14, borderWidth: 1, marginTop: 4 },
-  coachQuoteMark: { fontSize: 22, fontFamily: 'Georgia', opacity: 0.5, marginBottom: -4 },
-  coachQuote:     { fontSize: 12, color: C.gray, fontStyle: 'italic', lineHeight: 20 },
+
+  // Achievement badge
+  achievementRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 14 },
+  achievementText: { fontSize: 12, fontWeight: '700', flex: 1, lineHeight: 18 },
+
+  // Certification photo
+  certSection: { gap: 8 },
+  certLabel:   { fontSize: 9, fontWeight: '700', color: C.gray, letterSpacing: 1.5, textTransform: 'uppercase' },
+  certImage:   { width: '100%', height: 200, borderRadius: 12, backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border },
 
   // Values
   valuesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
@@ -261,13 +269,8 @@ const s = StyleSheet.create({
   valueDesc:  { fontSize: 11, color: C.gray, lineHeight: 18, textAlign: 'center' },
 
   // Contact
-  contactRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  contactIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '33', justifyContent: 'center', alignItems: 'center' },
-  contactLabel:{ fontSize: 9, fontWeight: '700', color: C.gray, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 3 },
-  contactVal:  { fontSize: 13, color: C.white, fontWeight: '500' },
-
-  // Form
-  formInput: { backgroundColor: C.inputBg, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 12, color: C.white, fontSize: 14 },
-  sendBtn:    { backgroundColor: C.red, borderRadius: 12, height: 52, justifyContent: 'center', alignItems: 'center', shadowColor: C.red, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
-  sendBtnText:{ color: C.white, fontSize: 15, fontWeight: '800' },
+  contactRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  contactIcon:  { width: 40, height: 40, borderRadius: 12, backgroundColor: C.red + '18', borderWidth: 1, borderColor: C.red + '33', justifyContent: 'center', alignItems: 'center' },
+  contactLabel: { fontSize: 9, fontWeight: '700', color: C.gray, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 3 },
+  contactVal:   { fontSize: 13, color: C.white, fontWeight: '500' },
 });

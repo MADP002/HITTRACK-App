@@ -25,16 +25,19 @@ const MONTHS = [
 // ── Password strength ─────────────────────────────────────────────────────
 function getStrength(pw) {
   if (!pw) return null;
-  let score = 0;
-  if (pw.length >= 6)  score++;
-  if (pw.length >= 10) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { label: 'Weak',   color: C.red,    pct: 25  };
-  if (score === 2) return { label: 'Fair',   color: C.orange, pct: 50  };
-  if (score === 3) return { label: 'Good',   color: C.gold,   pct: 75  };
-  return               { label: 'Strong', color: C.green,  pct: 100 };
+  // Score based on the 4 required criteria + bonus for extra length.
+  // Password only reaches 'Strong' once all 4 requirements are satisfied.
+  const hasLength  = pw.length >= 8;
+  const hasUpper   = /[A-Z]/.test(pw);
+  const hasDigit   = /[0-9]/.test(pw);
+  const hasSpecial = /[^A-Za-z0-9]/.test(pw);
+  const bonusLen   = pw.length >= 12;
+  const score = [hasLength, hasUpper, hasDigit, hasSpecial, bonusLen].filter(Boolean).length;
+  if (score <= 1) return { label: 'Weak',   color: C.red,    pct: 20  };
+  if (score === 2) return { label: 'Fair',   color: C.orange, pct: 45  };
+  if (score === 3) return { label: 'Good',   color: C.gold,   pct: 70  };
+  if (score === 4) return { label: 'Strong', color: C.green,  pct: 90  };
+  return                  { label: 'Strong', color: C.green,  pct: 100 };
 }
 
 // ── Age from DOB ──────────────────────────────────────────────────────────
@@ -98,8 +101,21 @@ export default function SignUpScreen() {
       else if (m < 1 || m > 12)      e.dob = 'Month must be between 1 and 12.';
       else if (y < 1900 || y > new Date().getFullYear()) e.dob = 'Enter a valid year.';
     }
-    if (!form.password) e.password = 'Password is required.';
-    else if (form.password.length < 8) e.password = 'Must be at least 8 characters.';
+    if (!form.password) {
+      e.password = 'Password is required.';
+    } else {
+      // Enforce all four password requirements — only applied to new accounts
+      // going forward; existing accounts are unaffected (Firebase never re-checks
+      // the old password, this validation only runs at the signup form level).
+      if (form.password.length < 8)
+        e.password = 'Password must be at least 8 characters.';
+      else if (!/[A-Z]/.test(form.password))
+        e.password = 'Password must include at least 1 uppercase letter.';
+      else if (!/[0-9]/.test(form.password))
+        e.password = 'Password must include at least 1 number.';
+      else if (!/[^A-Za-z0-9]/.test(form.password))
+        e.password = 'Password must include at least 1 special character (e.g. !@#$).';
+    }
     if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
     setErrors(e);
@@ -318,7 +334,7 @@ export default function SignUpScreen() {
               <Text style={s.label}>Password</Text>
               <View style={[s.inputRow, errors.password && s.inputError]}>
                 <Ionicons name="lock-closed-outline" size={18} color={C.gray} style={s.icon} />
-                <TextInput style={s.input} placeholder="At least 8 characters" placeholderTextColor={C.gray}
+                <TextInput style={s.input} placeholder="Min 8 chars, A-Z, 0-9, symbol" placeholderTextColor={C.gray}
                   value={form.password} onChangeText={t => updateField('password', t)}
                   secureTextEntry={!showPassword} autoCapitalize="none" />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={s.eyeBtn}>
@@ -334,6 +350,26 @@ export default function SignUpScreen() {
                     <View style={[s.strengthBarFill, { width: `${strength.pct}%`, backgroundColor: strength.color }]} />
                   </View>
                   <Text style={[s.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
+                </View>
+              )}
+              {/* Requirements checklist — shown as user types */}
+              {form.password.length > 0 && (
+                <View style={s.reqList}>
+                  {[
+                    { label: 'At least 8 characters',      met: form.password.length >= 8 },
+                    { label: 'At least 1 uppercase letter', met: /[A-Z]/.test(form.password) },
+                    { label: 'At least 1 number',          met: /[0-9]/.test(form.password) },
+                    { label: 'At least 1 special character (e.g. !@#$)', met: /[^A-Za-z0-9]/.test(form.password) },
+                  ].map(r => (
+                    <View key={r.label} style={s.reqRow}>
+                      <Ionicons
+                        name={r.met ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={13}
+                        color={r.met ? C.green : C.gray}
+                      />
+                      <Text style={[s.reqText, r.met && { color: C.green }]}>{r.label}</Text>
+                    </View>
+                  ))}
                 </View>
               )}
             </View>
@@ -441,6 +477,10 @@ const s = StyleSheet.create({
   strengthBarBg:  { flex: 1, height: 6, backgroundColor: C.border, borderRadius: 50, overflow: 'hidden' },
   strengthBarFill:{ height: '100%', borderRadius: 50 },
   strengthLabel:  { fontSize: 12, fontWeight: '800', minWidth: 46 },
+  // Password requirements checklist
+  reqList: { marginTop: 10, gap: 5 },
+  reqRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reqText: { fontSize: 12, color: C.gray },
 
   submitBtn:     { backgroundColor: C.red, borderRadius: 12, height: 54, justifyContent: 'center', alignItems: 'center', marginTop: 8, shadowColor: C.red, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 },
   submitBtnText: { color: C.white, fontSize: 16, fontWeight: '800', letterSpacing: 2 },
