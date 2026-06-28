@@ -5,11 +5,13 @@ import {
   ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { isClassActive } from '../../lib/classLifecycle';
+import { canBook, computeMembershipState, daysRemaining } from '../../lib/membership';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -119,6 +121,8 @@ export default function HomeScreen() {
   const [showHiddenFb,      setShowHiddenFb]       = useState(false);
   const [myBookings,        setMyBookings]        = useState([]);
   const [enrollingId,       setEnrollingId]       = useState(null);
+  const [showTrialWelcome,  setShowTrialWelcome]  = useState(false);
+  const [levelChangePopup,  setLevelChangePopup]  = useState(null);
   const [tipIndex,          setTipIndex]          = useState(0);
   const tipIndexRef = useRef(0); // keeps PanResponder in sync with current tipIndex
 
@@ -166,6 +170,10 @@ export default function HomeScreen() {
   const firstName = (userData?.name || 'Athlete').split(' ')[0];
   const initial   = (userData?.name || 'A')[0].toUpperCase();
 
+  // ── Membership gate (mirrors web: expired/paused can't book; stats locked) ──
+  const membershipState  = computeMembershipState(userData?.membership);
+  const membershipLocked = !canBook(userData?.membership);
+
   // Keep tipIndexRef in sync so PanResponder always reads the latest value
   useEffect(() => { tipIndexRef.current = tipIndex; }, [tipIndex]);
 
@@ -174,22 +182,55 @@ export default function HomeScreen() {
   const handleEnroll = async (cls) => {
     const user = auth.currentUser;
     if (!user) return;
+    // Membership gate — expired/paused members can't book (mirrors web canBook).
+    if (!canBook(userData?.membership)) {
+      Alert.alert('Membership Inactive', 'Your membership is expired or paused. Please contact the gym to renew before booking classes.');
+      return;
+    }
+    // Cheap pre-check for instant UX — the transaction below re-checks atomically.
     if ((cls.enrolled || 0) >= cls.spots) {
       Alert.alert('Class Full', 'This class is fully booked.');
       return;
     }
     setEnrollingId(cls.id);
     try {
-      await addDoc(collection(db, 'bookings'), {
-        classId:   cls.id,
-        className: cls.name,
-        userId:    user.uid,
-        userName:  userData?.name || 'Member',
-        createdAt: serverTimestamp(),
+      // 1. Guard against double-booking (cheap read first).
+      const dupSnap = await getDocs(
+        query(collection(db, 'bookings'), where('userId', '==', user.uid), where('classId', '==', cls.id))
+      );
+      if (!dupSnap.empty) {
+        Alert.alert('Already Enrolled', `You've already booked "${cls.name}".`);
+        return;
+      }
+      // 2. Atomic transaction — re-check spots + create booking + bump count together,
+      //    so two members can't oversell a class (mirrors web doBook, first come first served).
+      await runTransaction(db, async (tx) => {
+        const classRef  = doc(db, 'classes', cls.id);
+        const classSnap = await tx.get(classRef);
+        if (!classSnap.exists()) throw new Error('Class no longer exists');
+        const data     = classSnap.data();
+        const enrolled = data.enrolled || 0;
+        const spots    = data.spots || 0;
+        if (spots > 0 && enrolled >= spots) {
+          throw new Error(`SOLD_OUT:"${cls.name}" filled up while you were booking.`);
+        }
+        tx.update(classRef, { enrolled: increment(1) });
+        const bookingRef = doc(collection(db, 'bookings'));
+        tx.set(bookingRef, {
+          classId:   cls.id,
+          className: cls.name,
+          userId:    user.uid,
+          userName:  userData?.name || 'Member',
+          createdAt: serverTimestamp(),
+        });
       });
-      await updateDoc(doc(db, 'classes', cls.id), { enrolled: increment(1) });
-    } catch (e) { Alert.alert('Error', 'Could not enroll. Please try again.'); }
-    setEnrollingId(null);
+    } catch (e) {
+      const msg = String(e?.message || '');
+      if (msg.startsWith('SOLD_OUT:')) Alert.alert('Class Full', msg.replace('SOLD_OUT:', ''));
+      else Alert.alert('Error', 'Could not enroll. Please try again.');
+    } finally {
+      setEnrollingId(null);
+    }
   };
 
   const handleUnenroll = async (cls) => {
@@ -273,6 +314,43 @@ export default function HomeScreen() {
     const unsub = onSnapshot(q, snap => {
       setMyBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, console.error);
+    return () => unsub();
+  }, []);
+
+  // ── Free-trial welcome popup (once per account, mirrors web) ──────────────
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !userData) return;
+    if (computeMembershipState(userData.membership) !== 'trial') return;
+    const key = `hittrack_trial_welcomed_${uid}`;
+    AsyncStorage.getItem(key).then(seen => {
+      if (!seen) { setShowTrialWelcome(true); AsyncStorage.setItem(key, '1').catch(() => {}); }
+    }).catch(() => {});
+  }, [userData]);
+
+  // ── Level-change celebration (coach/admin promoted you) ───────────────────
+  //  Mirrors web: watches level_change notifications for this user and shows a
+  //  one-time congrats. Dedup via AsyncStorage so it never re-pops.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const q = query(
+      collection(db, 'notifications'),
+      where('targetUserId', '==', user.uid),
+      where('type', '==', 'level_change')
+    );
+    const unsub = onSnapshot(q, async (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      if (docs.length === 0) return;
+      const latest = docs[0];
+      const seenKey = 'hittrack_seen_level_changes';
+      let seen = [];
+      try { seen = JSON.parse((await AsyncStorage.getItem(seenKey)) || '[]'); } catch (e) {}
+      if (seen.includes(latest.id)) return;
+      setLevelChangePopup(latest);
+      try { await AsyncStorage.setItem(seenKey, JSON.stringify([...seen, latest.id])); } catch (e) {}
+    }, (err) => console.warn('Level change watcher:', err));
     return () => unsub();
   }, []);
 
@@ -545,6 +623,16 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
+
+          {membershipLocked && (
+            <View style={styles.statsLock}>
+              <Ionicons name="lock-closed" size={24} color={COLORS.gold} />
+              <Text style={styles.statsLockTitle}>
+                {membershipState === 'paused' ? 'Membership Paused' : 'Membership Expired'}
+              </Text>
+              <Text style={styles.statsLockSub}>Renew with the gym to view your stats</Text>
+            </View>
+          )}
         </View>
 
         {/* ── COACH FEEDBACK ── */}
@@ -738,6 +826,71 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* ── FREE-TRIAL WELCOME POPUP ── */}
+      <Modal visible={showTrialWelcome} transparent animationType="fade" onRequestClose={() => setShowTrialWelcome(false)}>
+        <View style={styles.popupOverlay}>
+          <View style={styles.trialCard}>
+            <View style={styles.trialAccent} />
+            <Text style={{ fontSize: 46 }}>🎉</Text>
+            <Text style={styles.popupTitle}>WELCOME TO HITTRACK!</Text>
+            <View style={styles.trialBadge}>
+              <Text style={styles.trialBadgeLabel}>FREE TRIAL</Text>
+              <Text style={styles.trialBadgeDays}>
+                {(() => {
+                  const d = daysRemaining(userData?.membership);
+                  return d != null && d >= 0 ? `${d} day${d === 1 ? '' : 's'} left` : '7 days';
+                })()}
+              </Text>
+            </View>
+            <Text style={styles.popupBody}>
+              You're on a 7-day free trial. Book classes, track your workouts, and explore everything HITTRACK offers. When your trial ends, speak with the gym admin to continue your membership.
+            </Text>
+            <TouchableOpacity style={styles.trialBtn} onPress={() => setShowTrialWelcome(false)} activeOpacity={0.85}>
+              <Text style={styles.trialBtnText}>Let's Go 🥊</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── LEVEL-CHANGE CELEBRATION POPUP ── */}
+      <Modal visible={!!levelChangePopup} transparent animationType="fade" onRequestClose={() => setLevelChangePopup(null)}>
+        {levelChangePopup && (() => {
+          const oldLv = levelChangePopup.oldLevel || 'Beginner';
+          const newLv = levelChangePopup.newLevel || 'Beginner';
+          const ORDER = ['Beginner', 'Intermediate', 'Advanced'];
+          const isPromote = ORDER.indexOf(newLv) > ORDER.indexOf(oldLv);
+          const lvColors = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#22c55e' };
+          const lvIcons  = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
+          const lc = lvColors[newLv] || COLORS.gold;
+          return (
+            <View style={styles.popupOverlay}>
+              <View style={[styles.levelCard, { borderColor: lc + '55' }]}>
+                <Text style={{ fontSize: 44 }}>{isPromote ? '🎉' : '🎚'}</Text>
+                <Text style={[styles.lvlTitle, { color: lc }]}>{isPromote ? 'LEVELED UP!' : 'LEVEL UPDATED'}</Text>
+                <Text style={styles.lvlBy}>By {levelChangePopup.from || 'Your Coach'}</Text>
+                <View style={styles.lvlRow}>
+                  <View style={{ alignItems: 'center', opacity: 0.4 }}>
+                    <View style={styles.lvlOldCircle}><Text style={{ fontSize: 24 }}>{lvIcons[oldLv] || '🥊'}</Text></View>
+                    <Text style={styles.lvlOldLabel}>{oldLv.toUpperCase()}</Text>
+                  </View>
+                  <Text style={{ fontSize: 22, color: lc }}>{isPromote ? '➡' : '⬅'}</Text>
+                  <View style={{ alignItems: 'center' }}>
+                    <View style={[styles.lvlNewCircle, { backgroundColor: lc, borderColor: lc }]}><Text style={{ fontSize: 28 }}>{lvIcons[newLv] || '🥊'}</Text></View>
+                    <Text style={[styles.lvlNewLabel, { color: lc }]}>{newLv.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <Text style={styles.popupBody}>
+                  {levelChangePopup.message || `You're now ${newLv}. Your training plan and leaderboard division have been updated.`}
+                </Text>
+                <TouchableOpacity style={[styles.lvlBtn, { backgroundColor: lc }]} onPress={() => setLevelChangePopup(null)} activeOpacity={0.85}>
+                  <Text style={styles.lvlBtnText}>🥊 LET'S GO!</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })()}
+      </Modal>
+
 
     </SafeAreaView>
   );
@@ -865,8 +1018,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', gap: 16, alignItems: 'center',
     backgroundColor: COLORS.card, borderRadius: 20,
     padding: 18, borderWidth: 1, borderColor: COLORS.border,
+    position: 'relative', overflow: 'hidden',
   },
   ringTitle: { fontSize: 11, color: COLORS.gray, fontWeight: '700', textAlign: 'center' },
+  statsLock: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(22,22,22,0.96)',
+    justifyContent: 'center', alignItems: 'center', gap: 4, padding: 16,
+  },
+  statsLockTitle: { fontSize: 14, fontWeight: '800', color: COLORS.white },
+  statsLockSub:   { fontSize: 11, color: COLORS.gray, textAlign: 'center' },
   statItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: COLORS.inputBg, borderRadius: 10,
@@ -970,4 +1131,51 @@ const styles = StyleSheet.create({
   fbExerciseTag:  { backgroundColor: COLORS.bg, borderRadius: 50, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 9, paddingVertical: 3 },
   fbExerciseTagText: { fontSize: 10, color: COLORS.gray, fontWeight: '600' },
   fbExpandHint: { fontSize: 10, color: COLORS.gold, fontWeight: '700' },
+
+  // Celebration / welcome popups
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.88)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  popupTitle: { fontSize: 22, fontWeight: '900', color: COLORS.white, textAlign: 'center', letterSpacing: 0.5 },
+  popupBody:  { fontSize: 13, color: COLORS.lightGray, textAlign: 'center', lineHeight: 20 },
+
+  trialCard: {
+    width: '100%', maxWidth: 380, backgroundColor: '#14110f',
+    borderRadius: 22, borderWidth: 1.5, borderColor: 'rgba(66,165,245,0.4)',
+    padding: 28, alignItems: 'center', gap: 14, overflow: 'hidden',
+  },
+  trialAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 5, backgroundColor: '#42a5f5' },
+  trialBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 50,
+    backgroundColor: 'rgba(66,165,245,0.12)', borderWidth: 1, borderColor: 'rgba(66,165,245,0.35)',
+  },
+  trialBadgeLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: '#42a5f5' },
+  trialBadgeDays:  { fontSize: 11, fontWeight: '700', color: '#cdd5dc' },
+  trialBtn: {
+    width: '100%', backgroundColor: '#42a5f5', borderRadius: 50,
+    paddingVertical: 14, alignItems: 'center', marginTop: 4,
+  },
+  trialBtnText: { fontSize: 14, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+
+  levelCard: {
+    width: '100%', maxWidth: 400, backgroundColor: '#14110f',
+    borderRadius: 24, borderWidth: 2, padding: 28, alignItems: 'center', gap: 12,
+  },
+  lvlTitle: { fontSize: 26, fontWeight: '900', letterSpacing: 1, textAlign: 'center' },
+  lvlBy:    { fontSize: 10, color: COLORS.gray, letterSpacing: 1, fontWeight: '700', textTransform: 'uppercase' },
+  lvlRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginVertical: 8 },
+  lvlOldCircle: {
+    width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 6,
+  },
+  lvlOldLabel: { fontSize: 9, color: '#666', fontWeight: '800', letterSpacing: 1 },
+  lvlNewCircle: {
+    width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, marginBottom: 6,
+  },
+  lvlNewLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  lvlBtn: { width: '100%', borderRadius: 50, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
+  lvlBtnText: { fontSize: 13, fontWeight: '800', color: '#000', letterSpacing: 1 },
 });
