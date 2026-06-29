@@ -206,7 +206,8 @@ export default function TodaysWorkoutScreen() {
         ) : (
           <View style={s.workoutCard}>
             <Text style={s.workoutTitle}>{workout.title || 'Workout'}</Text>
-            <Text style={s.workoutSub}>{workout.subtitle || workout.goal || ''}{workout.duration ? ` · ${workout.duration}` : ''}</Text>
+            <Text style={s.workoutFocus}>📋 Today's focus: <Text style={{ color: C.gold, fontWeight: '800' }}>{workout.subtitle || workout.goal || 'Training'}</Text></Text>
+            <Text style={s.workoutSub}>From your program builder{workout.duration ? ` · ${workout.duration}` : ''}</Text>
 
             {/* progress */}
             <View style={s.progressBg}>
@@ -283,7 +284,8 @@ const s = StyleSheet.create({
   // Workout
   workoutCard: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 16, gap: 10 },
   workoutTitle:{ fontSize: 20, fontWeight: '900', color: C.white },
-  workoutSub:  { fontSize: 12, color: C.gray, marginTop: -4 },
+  workoutFocus:{ fontSize: 12, color: C.lightGray, fontWeight: '600', marginTop: -2 },
+  workoutSub:  { fontSize: 11, color: C.gray },
   progressBg:  { height: 8, backgroundColor: C.border, borderRadius: 50, overflow: 'hidden', marginTop: 4 },
   progressFill:{ height: '100%', borderRadius: 50 },
   progressText:{ fontSize: 11, color: C.gray, fontWeight: '600' },
