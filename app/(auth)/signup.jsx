@@ -10,12 +10,7 @@ import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E', errorBg: '#2A1215',
-  gold: '#F5C842', blue: '#42a5f5', green: '#4ade80', orange: '#fb923c',
-};
+import { C } from '../../lib/theme';
 
 const MONTHS = [
   'January','February','March','April','May','June',

@@ -18,12 +18,7 @@ import { getLevelLabel, getNextLevel, getLevelStars } from '../../lib/trainingPr
 const CLOUDINARY_CLOUD_NAME   = 'dthdcmisj';    // e.g. 'hittrack'
 const CLOUDINARY_UPLOAD_PRESET = 'hittrack_videos'; // e.g. 'hittrack_videos'
 
-const C = {
-  bg: '#000000', card: '#111111', border: '#1E1E1E',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  gold: '#F5C842', green: '#4ade80', blue: '#42a5f5',
-  lightGray: '#CCCCCC', inputBg: '#1A1A1A', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 // ── Save session + mark training complete in Firestore ────────────
 async function completeTraining({ uid, trainingId, level, properReps, duration, requiredReps }) {

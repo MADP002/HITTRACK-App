@@ -10,12 +10,7 @@ import { auth, db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getTypeInfo, getLevelLabel, getRequiredReps } from '../../lib/trainingPrograms';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  gold: '#F5C842', green: '#4ade80', inputBg: '#1E1E1E',
-  lightGray: '#CCCCCC', blue: '#42a5f5', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 export default function TrainingDetailScreen() {
   const router = useRouter();

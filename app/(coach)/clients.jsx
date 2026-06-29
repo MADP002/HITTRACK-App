@@ -10,12 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  blue: '#42a5f5', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842', red: '#E63946',
-};
+import { C as COLORS } from '../../lib/theme';
 const LEVEL_COLORS = { Beginner:'#fb923c', Intermediate:'#F5C842', Advanced:'#4ade80' };
 const LEVEL_ICONS  = { Beginner:'🥊', Intermediate:'⚡', Advanced:'🔥' };
 

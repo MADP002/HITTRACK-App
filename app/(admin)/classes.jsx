@@ -15,12 +15,7 @@ import {
 import { isClassActive, autoEndPastClasses } from '../../lib/classLifecycle';
 import { logActivity } from '../../lib/activityLog';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  green: '#4ade80', gold: '#F5C842', blue: '#42a5f5',
-  purple: '#c084fc', inputBg: '#1E1E1E', lightGray: '#CCCCCC',
-};
+import { C } from '../../lib/theme';
 const LEVEL_COLORS = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
 const LEVEL_ICONS  = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
 const DAYS   = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];

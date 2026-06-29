@@ -16,13 +16,7 @@ import {
 } from 'firebase/firestore';
 import { logActivity } from '../../lib/activityLog';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  green: '#4ade80', gold: '#F5C842', blue: '#42a5f5',
-  purple: '#c084fc', inputBg: '#1E1E1E', lightGray: '#CCCCCC',
-  orange: '#fb923c',
-};
+import { C } from '../../lib/theme';
 const LEVEL_COLORS = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
 const LEVEL_ICONS  = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];

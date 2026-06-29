@@ -14,12 +14,7 @@ import { loadPoseModel, detectPoseFromPhoto } from '../../lib/poseDetection';
 import { createDetector } from '../../lib/moveDetector';
 import { playSuccessSound, speakEncouragement, ENCOURAGEMENT_PHRASES } from '../../lib/sounds';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  gold: '#F5C842', green: '#4ade80', inputBg: '#1E1E1E',
-  lightGray: '#CCCCCC', blue: '#42a5f5', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 const CAPTURE_INTERVAL_MS = 60;    // floor between captures — real cadence is paced by device speed
 const SAFETY_MAX_DURATION_SEC = 1800; // 30 min battery-safety net only, not a real workout timer
