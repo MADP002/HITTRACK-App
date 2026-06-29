@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, increment, runTransaction, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { isClassActive } from '../../lib/classLifecycle';
 import { canBook, computeMembershipState, daysRemaining } from '../../lib/membership';
 
@@ -149,6 +149,27 @@ export default function HomeScreen() {
       return () => unsub();
     } catch (e) { console.warn('Announcements error:', e); }
   }, []);
+
+  // ── Dismiss / clear announcements (Firestore-backed, syncs with web) ──────
+  // Web stores cleared ids in users/{uid}.dismissedAnnouncements; we read the
+  // SAME field (via userData, which is a live snapshot) and write it — so
+  // clearing on either app hides the announcement on both.
+  const dismissedAnnouncements = userData?.dismissedAnnouncements || [];
+  const visibleAnnouncements   = announcements.filter(n => !dismissedAnnouncements.includes(n.id));
+
+  const dismissAnnouncement = async (id) => {
+    const u = auth.currentUser;
+    if (!u) return;
+    try { await updateDoc(doc(db, 'users', u.uid), { dismissedAnnouncements: arrayUnion(id) }); }
+    catch (e) { console.warn('Dismiss announcement:', e.message); }
+  };
+  const clearAllAnnouncements = async () => {
+    const u = auth.currentUser;
+    if (!u || visibleAnnouncements.length === 0) return;
+    const ids = visibleAnnouncements.map(n => n.id);
+    try { await updateDoc(doc(db, 'users', u.uid), { dismissedAnnouncements: arrayUnion(...ids) }); }
+    catch (e) { console.warn('Clear announcements:', e.message); }
+  };
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const totalWorkouts = userData?.totalWorkouts || 0;
@@ -418,26 +439,33 @@ export default function HomeScreen() {
                 <Ionicons name="megaphone" size={16} color={COLORS.gold} />
                 <Text style={styles.announcementTitle}>Announcements</Text>
               </View>
-              {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{announcements.filter(a => !viewedIds.has(a.id)).length}</Text>
-                </View>
-              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length}</Text>
+                  </View>
+                )}
+                {visibleAnnouncements.length > 0 && (
+                  <TouchableOpacity onPress={clearAllAnnouncements} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.clearAllText}>Clear all</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            {announcements.length === 0 ? (
+            {visibleAnnouncements.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={{ fontSize: 32 }}>📭</Text>
-                <Text style={styles.emptyText}>No announcements yet.</Text>
+                <Text style={styles.emptyText}>You're all caught up.</Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
-                {announcements.map((n, i) => {
+                {visibleAnnouncements.map((n, i) => {
                   const isViewed = viewedIds.has(n.id);
                   return (
                     <TouchableOpacity
                       key={n.id}
-                      style={[styles.announcementItem, i < announcements.length - 1 && styles.itemBorder, !isViewed && styles.announcementItemUnread]}
+                      style={[styles.announcementItem, i < visibleAnnouncements.length - 1 && styles.itemBorder, !isViewed && styles.announcementItemUnread]}
                       onPress={() => markViewed(n.id)}
                       activeOpacity={0.8}
                     >
@@ -451,6 +479,9 @@ export default function HomeScreen() {
                         <Text style={styles.itemFrom}>From: {n.from || 'Admin'}</Text>
                       </View>
                       {!isViewed && <View style={styles.unreadDotSmall} />}
+                      <TouchableOpacity onPress={() => dismissAnnouncement(n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
+                        <Ionicons name="close" size={16} color={COLORS.gray} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   );
                 })}
@@ -472,10 +503,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowAnnouncements(true)}>
             <Ionicons name="megaphone-outline" size={22} color={COLORS.lightGray} />
-            {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
+            {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 0 && (
               <View style={styles.notifDot}>
                 <Text style={styles.notifDotText}>
-                  {announcements.filter(a => !viewedIds.has(a.id)).length > 9 ? '9+' : announcements.filter(a => !viewedIds.has(a.id)).length}
+                  {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 9 ? '9+' : visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length}
                 </Text>
               </View>
             )}
@@ -961,6 +992,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2,
   },
   badgeText:  { fontSize: 11, color: COLORS.white, fontWeight: '700' },
+  clearAllText: { fontSize: 11, color: COLORS.red, fontWeight: '800', letterSpacing: 0.3 },
   emptyBox:   { padding: 32, alignItems: 'center', gap: 8 },
   emptyText:  { fontSize: 13, color: COLORS.gray },
   announcementItem: {
