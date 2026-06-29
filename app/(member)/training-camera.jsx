@@ -286,10 +286,11 @@ export default function TrainingCameraScreen() {
     if (phase === 'active' && repsRef.current > 0) {
       Alert.alert(
         'Leave Training?',
-        'Your progress in this session will be lost if you leave now.',
+        `You've done ${repsRef.current} rep${repsRef.current === 1 ? '' : 's'}. Save them to your results, or discard the session?`,
         [
           { text: 'Stay', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => { stopLoopAndTimer(); router.replace('/(member)/training-lab'); } },
+          { text: 'Discard', style: 'destructive', onPress: () => { stopLoopAndTimer(); router.replace('/(member)/training-lab'); } },
+          { text: 'Finish & Save', onPress: () => finishSession('manual') },
         ]
       );
     } else {

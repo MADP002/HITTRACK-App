@@ -26,7 +26,7 @@ const C = {
 };
 
 // ── Save session + mark training complete in Firestore ────────────
-async function completeTraining({ uid, trainingId, level, properReps, duration }) {
+async function completeTraining({ uid, trainingId, level, properReps, duration, requiredReps }) {
   try {
     console.log(`[completeTraining] called with trainingId="${trainingId}" level="${level}" properReps=${properReps}`);
     const workRef  = doc(db, 'workouts', uid);
@@ -46,10 +46,13 @@ async function completeTraining({ uid, trainingId, level, properReps, duration }
       return { leveledUp: false };
     }
 
-    // Mark this training as completed at this level
+    // Mark this training as completed at this level — ONLY if the member
+    // actually hit the rep target. Finishing early (Finish & Save) still
+    // records the session + stats below, but must not falsely complete a level.
+    const reachedTarget = (properReps || 0) >= (requiredReps || 0) && (requiredReps || 0) > 0;
     const idx = program.findIndex(t => t.id === trainingId);
-    console.log(`[completeTraining] findIndex result: idx=${idx}`);
-    if (idx !== -1) {
+    console.log(`[completeTraining] findIndex result: idx=${idx} reachedTarget=${reachedTarget}`);
+    if (idx !== -1 && reachedTarget) {
       const completed = program[idx].completedLevels || [];
       console.log(`[completeTraining] existing completedLevels for "${trainingId}":`, completed);
       if (!completed.includes(level)) {
@@ -252,7 +255,7 @@ export default function TrainingCompleteScreen() {
     hasCompletedRef.current = true;
 
     Promise.all([
-      completeTraining({ uid: user.uid, trainingId, level, properReps, duration }),
+      completeTraining({ uid: user.uid, trainingId, level, properReps, duration, requiredReps }),
       getDocs(collection(db, 'users')),
     ]).then(([result, usersSnap]) => {
       setLeveledUp(result.leveledUp);
