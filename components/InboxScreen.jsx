@@ -47,7 +47,7 @@ function fmtMsgDate(ts) {
 }
 
 // ── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function InboxScreen() {
+export default function InboxScreen({ embedded = false }) {
   const currentUid = auth.currentUser?.uid;
    const router = useRouter();
   const [profile,       setProfile]       = useState({ name: 'Me', role: 'member' });
@@ -268,7 +268,7 @@ export default function InboxScreen() {
   const myRoleColor = ROLE_COLOR[profile.role] || C.gold;
  
   return (
-    <SafeAreaView edges={['top']} style={s.safe}>
+    <SafeAreaView edges={embedded ? [] : ['top']} style={s.safe}>
       {/* ══════════════════════════════════════════════════════════
            THREAD MODAL
       ══════════════════════════════════════════════════════════ */}
@@ -395,7 +395,7 @@ export default function InboxScreen() {
                 <Ionicons name="arrow-back" size={20} color={C.white} />
               </TouchableOpacity>
               <View style={s.forumHeaderInfo}>
-                <Text style={s.forumHeaderTitle}>🌐 Forum community</Text>
+                <Text style={s.forumHeaderTitle}>🌐 Group Chat</Text>
                 <Text style={s.forumHeaderSub}>All members · coaches · admins</Text>
               </View>
               <View style={[s.forumHeaderBadge]}>
@@ -413,7 +413,7 @@ export default function InboxScreen() {
               {forumMessages.length === 0 ? (
                 <View style={s.emptyThread}>
                   <Text style={{ fontSize: 48 }}>🌐</Text>
-                  <Text style={s.emptyThreadTitle}>Forum is Empty</Text>
+                  <Text style={s.emptyThreadTitle}>Group Chat is Empty</Text>
                   <Text style={s.emptyThreadSub}>Be the first to say something!</Text>
                 </View>
               ) : (
@@ -578,9 +578,11 @@ export default function InboxScreen() {
   
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.inboxBackBtn} onPress={handleBack}>
-          <Ionicons name="arrow-back" size={20} color={C.white} />
-        </TouchableOpacity>
+        {!embedded && (
+          <TouchableOpacity style={s.inboxBackBtn} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={20} color={C.white} />
+          </TouchableOpacity>
+        )}
         <View style={s.headerLeft}>
           <Text style={s.headerTitle}>💬 Inbox</Text>
           {totalUnread > 0 && (
@@ -627,7 +629,7 @@ export default function InboxScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <View style={s.forumCardTitleRow}>
-              <Text style={s.forumCardTitle}>Forum</Text>
+              <Text style={s.forumCardTitle}>Group Chat</Text>
               <View style={s.forumCardAllBadge}>
                 <Text style={s.forumCardAllBadgeText}>Everyone</Text>
               </View>

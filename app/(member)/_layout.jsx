@@ -64,7 +64,7 @@ export default function MemberLayout() {
       <Tabs.Screen
         name="forum"
         options={{
-          title: 'Inbox',
+          title: 'Community',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
           ),
