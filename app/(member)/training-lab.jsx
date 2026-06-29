@@ -255,6 +255,7 @@ export default function TrainingLabScreen() {
             const completed = isCompleted(training);
             const typeInfo  = getTypeInfo(training.type);
             const reps      = getRequiredReps(training, currentLevel);
+            const done      = training.repProgress?.[currentLevel] || 0;
 
             return (
               <TouchableOpacity
@@ -304,9 +305,9 @@ export default function TrainingLabScreen() {
                   </View>
                   <Text style={s.trainingReps}>
                     {completed
-                      ? `✓ Completed · ${reps} ${training.type === 'strength' ? 'reps' : 'proper reps'}`
+                      ? `✓ Completed · ${reps} reps`
                       : unlocked
-                        ? `${reps} proper ${training.type === 'strength' ? 'reps' : training.type === 'defense' ? 'reps' : 'reps'} required`
+                        ? (done > 0 ? `${done}/${reps} reps · resume anytime` : `${reps} reps to complete`)
                         : 'Complete previous training to unlock'
                     }
                   </Text>

@@ -18,11 +18,14 @@ const C = {
 
 // Mirrors web PunchAnalyticsCard METRIC_DEFS. powerOutput stays null in
 // recordings mode (the pose pipeline owns it) — shown as "—".
+// Only metrics we can ACTUALLY derive from the rep data. Power Output was
+// removed — 2D keypoints can't measure force, it was always null. "Combo Flow"
+// was really timing consistency, so it's honestly labeled "Rhythm"; "Form
+// Accuracy" is a rough extension proxy, labeled "Form Quality".
 const METRICS = [
-  { key: 'punchSpeed',  icon: '⚡', label: 'Punch Speed',   color: C.gold,  poseUnit: 'ppm', recUnit: 'rpm', max: 120 },
-  { key: 'powerOutput', icon: '💥', label: 'Power Output',  color: C.red,   poseUnit: '%',   recUnit: '%',   max: 100 },
-  { key: 'accuracy',    icon: '🎯', label: 'Form Accuracy', color: C.green, poseUnit: '%',   recUnit: '%',   max: 100 },
-  { key: 'comboFlow',   icon: '🔄', label: 'Combo Flow',    color: C.blue,  poseUnit: '%',   recUnit: '%',   max: 100 },
+  { key: 'punchSpeed', icon: '⚡', label: 'Punch Speed',  color: C.gold,  poseUnit: 'ppm', recUnit: 'rpm', max: 120 },
+  { key: 'accuracy',   icon: '🎯', label: 'Form Quality', color: C.green, poseUnit: '%',   recUnit: '%',   max: 100 },
+  { key: 'comboFlow',  icon: '🔄', label: 'Rhythm',       color: C.blue,  poseUnit: '%',   recUnit: '%',   max: 100 },
 ];
 
 export default function TrainingReportScreen() {
@@ -124,7 +127,7 @@ export default function TrainingReportScreen() {
                     <View style={s.barBg}>
                       <View style={{ height: '100%', borderRadius: 50, width: `${pct}%`, backgroundColor: missing ? 'rgba(255,255,255,0.06)' : m.color }} />
                     </View>
-                    {missing && <Text style={s.comingSoon}>Coming soon — captured by full pose pipeline</Text>}
+                    {missing && <Text style={s.comingSoon}>Not enough reps logged yet</Text>}
                   </View>
                 </View>
               );

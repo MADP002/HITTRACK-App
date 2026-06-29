@@ -46,33 +46,32 @@ async function completeTraining({ uid, trainingId, level, properReps, duration, 
       return { leveledUp: false };
     }
 
-    // Mark this training as completed at this level — ONLY if the member
-    // actually hit the rep target. Finishing early (Finish & Save) still
-    // records the session + stats below, but must not falsely complete a level.
-    const reachedTarget = (properReps || 0) >= (requiredReps || 0) && (requiredReps || 0) > 0;
+    // RESUME: accumulate reps across sessions. Each session's reps add to a
+    // running tally (repProgress) for this training+level; the level only
+    // completes once the CUMULATIVE total reaches the target. So a member can
+    // chip away over several sittings instead of needing the whole target in
+    // one go — which the strict camera detection makes nearly impossible.
+    let reachedTarget = false;
     const idx = program.findIndex(t => t.id === trainingId);
-    console.log(`[completeTraining] findIndex result: idx=${idx} reachedTarget=${reachedTarget}`);
-    if (idx !== -1 && reachedTarget) {
-      const completed = program[idx].completedLevels || [];
-      console.log(`[completeTraining] existing completedLevels for "${trainingId}":`, completed);
-      if (!completed.includes(level)) {
-        program[idx] = {
-          ...program[idx],
-          completedLevels: [...completed, level],
-        };
-        console.log(`[completeTraining] added "${level}" to completedLevels — now:`, program[idx].completedLevels);
-      } else {
-        console.log(`[completeTraining] level "${level}" was ALREADY in completedLevels — no change made`);
-      }
-      // Unlock next training
-      if (idx + 1 < program.length) {
-        program[idx + 1] = { ...program[idx + 1], unlocked: true };
-        console.log(`[completeTraining] unlocked next training: "${program[idx + 1].id}"`);
-      } else {
-        console.log('[completeTraining] this was the LAST training in the program — nothing to unlock');
+    if (idx !== -1) {
+      const completed    = program[idx].completedLevels || [];
+      const prevProgress = program[idx].repProgress?.[level] || 0;
+      const newProgress  = prevProgress + (properReps || 0);
+      reachedTarget = (requiredReps || 0) > 0 && newProgress >= requiredReps;
+      program[idx] = {
+        ...program[idx],
+        // keep the running tally; reset to 0 once the level is complete
+        repProgress: { ...(program[idx].repProgress || {}), [level]: reachedTarget ? 0 : newProgress },
+      };
+      console.log(`[completeTraining] ${trainingId}/${level}: +${properReps} reps -> ${reachedTarget ? 'COMPLETE' : `${newProgress}/${requiredReps}`}`);
+      if (reachedTarget && !completed.includes(level)) {
+        program[idx] = { ...program[idx], completedLevels: [...completed, level] };
+        if (idx + 1 < program.length) {
+          program[idx + 1] = { ...program[idx + 1], unlocked: true };
+        }
       }
     } else {
-      console.log(`[completeTraining] !!! trainingId "${trainingId}" was NOT FOUND in the program — nothing was marked complete or unlocked !!!`);
+      console.log(`[completeTraining] !!! trainingId "${trainingId}" NOT FOUND in program !!!`);
     }
 
     // Check if all trainings are complete at this level
