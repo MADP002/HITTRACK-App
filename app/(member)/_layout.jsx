@@ -78,6 +78,8 @@ export default function MemberLayout() {
       <Tabs.Screen name="training-detail"      options={{ href: null }} />
       <Tabs.Screen name="training-camera"      options={{ href: null }} />
       <Tabs.Screen name="training-complete"    options={{ href: null }} />
+      <Tabs.Screen name="training-report"      options={{ href: null }} />
+      <Tabs.Screen name="todays-workout"       options={{ href: null }} />
     </Tabs>
   );
 }
