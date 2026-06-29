@@ -9,12 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../../firebase';
 import { loadPunchAnalytics } from '../../lib/punchAnalytics';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842', blue: '#42a5f5', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 // Mirrors web PunchAnalyticsCard METRIC_DEFS. powerOutput stays null in
 // recordings mode (the pose pipeline owns it) — shown as "—".

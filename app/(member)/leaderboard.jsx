@@ -13,12 +13,7 @@ import { canBook, computeMembershipState } from '../../lib/membership';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842',
-};
+import { C as COLORS } from '../../lib/theme';
 
 const LEVEL_COLOR  = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
 const LEVEL_ICON   = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
