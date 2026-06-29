@@ -467,6 +467,14 @@ export default function TrainingCompleteScreen() {
             </View>
           )}
 
+          {/* ── VIEW TRAINING REPORT ── */}
+          <TouchableOpacity
+            style={{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, backgroundColor:'#1E1E1E', borderWidth:1, borderColor:'#2A2A2A', borderRadius:14, paddingVertical:14, marginBottom:10 }}
+            onPress={() => router.push('/(member)/training-report')} activeOpacity={0.85}>
+            <Ionicons name="bar-chart-outline" size={18} color="#F5C842" />
+            <Text style={{ fontSize:14, fontWeight:'800', color:'#F5C842' }}>View Training Report</Text>
+          </TouchableOpacity>
+
           {/* ── PROCEED BUTTON ── */}
           <TouchableOpacity style={s.proceedBtn} onPress={handleProceed} activeOpacity={0.85}>
             <Text style={s.proceedBtnText}>Back to Training Lab</Text>

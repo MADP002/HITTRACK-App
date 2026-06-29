@@ -203,7 +203,9 @@ export default function TrainingLabScreen() {
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>🥊 Training Lab</Text>
-        <View style={{ width: 38 }} />
+        <TouchableOpacity style={s.backBtn} onPress={() => router.push('/(member)/training-report')} accessibilityLabel="View training report">
+          <Ionicons name="bar-chart-outline" size={20} color={C.gold} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
