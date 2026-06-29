@@ -580,6 +580,26 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
 
+        {/* ── TODAY'S WORKOUT BUTTON ── */}
+        <TouchableOpacity
+          style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', backgroundColor:'#0e1a14', borderRadius:18, padding:18, borderWidth:1.5, borderColor:'#4ade8055' }}
+          onPress={() => router.push('/(member)/todays-workout')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection:'row', alignItems:'center', gap:14, flex:1 }}>
+            <View style={{ width:52, height:52, borderRadius:14, backgroundColor:'#4ade8022', justifyContent:'center', alignItems:'center' }}>
+              <Text style={{ fontSize:26 }}>📋</Text>
+            </View>
+            <View style={{ flex:1 }}>
+              <Text style={{ fontSize:18, fontWeight:'900', color:'#fff' }}>Today's Workout</Text>
+              <Text style={{ fontSize:12, color:'#888', marginTop:2 }}>Your program + Adaptive Coach</Text>
+            </View>
+          </View>
+          <View style={{ width:36, height:36, borderRadius:18, backgroundColor:'#4ade8022', justifyContent:'center', alignItems:'center' }}>
+            <Text style={{ fontSize:18, color:'#4ade80', fontWeight:'900' }}>→</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* ── TRAINING LAB BUTTON ── */}
         <TouchableOpacity
           style={styles.trainingLabBtn}
