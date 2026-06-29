@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,15 +10,35 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../../firebase';
 import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { buildSchedule, exerciseName, isRichExercise } from '../../lib/scheduleBuilder';
-import { computeDifficulty, evaluateAdaptations } from '../../lib/adaptiveEngine';
+import { computeDifficulty, computeDifficultyBreakdown, evaluateAdaptations } from '../../lib/adaptiveEngine';
 import { computeTrainingStats, computeWeeklyHistory, computeMissedDays } from '../../lib/trainingStats';
 import { canBook, computeMembershipState } from '../../lib/membership';
 import { C, glow } from '../../lib/theme';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Decision card accent by severity (matches the engine's severity values).
-const SEV_COLOR = { positive: C.green, warning: C.gold, celebrate: C.purple, info: C.blue };
+// Decision accent by severity — aligned with web Home.jsx (celebrate=gold, positive=green,
+// warning=red, info=blue) so the same rule looks the same on web and mobile.
+const SEV_COLOR = { celebrate: C.gold, positive: C.green, warning: C.red, info: C.blue };
+const sevColor = (s) => SEV_COLOR[s] || C.blue;
+
+// Plain-language note shown on rules the coach actually APPLIED to today's plan
+// (mirrors web RULE_ACTION). Other rules are advisory only.
+const RULE_ACTION = {
+  RESET_DAY:     'Today swapped to a light Reset Day',
+  CHAMPION_MODE: 'Champion bonus exercise added to today',
+};
+
+const startOfDay = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const relTime = (ms) => {
+  if (!ms) return '';
+  const days = Math.round((startOfDay(Date.now()) - startOfDay(ms)) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7)  return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return new Date(ms).toLocaleDateString();
+};
 
 export default function TodaysWorkoutScreen() {
   const router = useRouter();
@@ -27,8 +47,11 @@ export default function TodaysWorkoutScreen() {
   const [workout, setWorkout]   = useState(null);
   const [checks, setChecks]     = useState([]);
   const [trainedDates, setTrainedDates] = useState([]);
-  const [adaptive, setAdaptive] = useState({ difficulty: 3, decisions: [], streak: 0, weeklyPct: 0, totalWorkouts: 0 });
+  const [adaptive, setAdaptive] = useState({ difficulty: 3, decisions: [], streak: 0, weeklyPct: 0, totalWorkouts: 0, breakdown: null });
   const [saving, setSaving]     = useState(false);
+  const [adaptiveOpen, setAdaptiveOpen]   = useState(false);  // explainability modal
+  const [adaptiveLog, setAdaptiveLog]     = useState([]);      // last 10 from Firestore
+  const [adaptiveClearedAt, setAdaptiveClearedAt] = useState(0); // hide timeline before this ms (non-destructive)
 
   const todayStr = ymd(new Date());
 
@@ -43,7 +66,8 @@ export default function TodaysWorkoutScreen() {
     };
     const difficulty = computeDifficulty(state);
     const decisions = evaluateAdaptations(state);
-    setAdaptive({ difficulty, decisions, streak, weeklyPct, totalWorkouts });
+    const breakdown = computeDifficultyBreakdown({ experience, streak, weeklyPct, totalWorkouts });
+    setAdaptive({ difficulty, decisions, streak, weeklyPct, totalWorkouts, breakdown });
     persistDecisions(u, decisions, difficulty);
   }, []);
 
@@ -95,11 +119,33 @@ export default function TodaysWorkoutScreen() {
       const dates = [...set];
       setTrainedDates(dates);
       computeAdaptive(u, dates);
+
+      // Adaptation timeline — last 10 logged decisions (where-only query, sorted
+      // client-side to avoid a composite index, same as web).
+      try {
+        const logSnap = await getDocs(query(collection(db, 'adaptiveDecisions'), where('userId', '==', user.uid)));
+        const logs = [];
+        logSnap.forEach(d => logs.push({ id: d.id, ...d.data() }));
+        logs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        setAdaptiveLog(logs.slice(0, 10));
+        const clearedRaw = await AsyncStorage.getItem('hittrack_adaptive_cleared_' + user.uid);
+        setAdaptiveClearedAt(Number(clearedRaw) || 0);
+      } catch (e) { console.warn('adaptive log (non-fatal):', e.message); }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [computeAdaptive, todayStr]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Hide timeline entries before "now" — non-destructive (we never delete the
+  // adaptiveDecisions docs, just remember a per-user cutoff). Mirrors web.
+  async function clearAdaptiveTimeline() {
+    const user = auth.currentUser;
+    if (!user) return;
+    const now = Date.now();
+    try { await AsyncStorage.setItem('hittrack_adaptive_cleared_' + user.uid, String(now)); } catch {}
+    setAdaptiveClearedAt(now);
+  }
 
   const membershipState = computeMembershipState(userData?.membership);
   const blocked = !!userData && !canBook(userData.membership);
@@ -161,12 +207,18 @@ export default function TodaysWorkoutScreen() {
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* ── ADAPTIVE COACH ── */}
-        <View style={s.adaptiveCard}>
+        {/* ── ADAPTIVE COACH ── (tap anywhere to open the reasoning modal) */}
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setAdaptiveOpen(true)} style={s.adaptiveCard}>
           <View style={s.adaptiveTop}>
             <View style={{ flex: 1 }}>
-              <Text style={s.adaptiveTitle}>🧠 Adaptive Coach</Text>
-              <Text style={s.adaptiveSub}>Rule-based · {adaptive.decisions.length} insight{adaptive.decisions.length === 1 ? '' : 's'}</Text>
+              <View style={s.adaptiveTitleRow}>
+                <Text style={s.adaptiveTitle}>🧠 Adaptive Coach</Text>
+                <View style={s.activePill}>
+                  <View style={s.activeDot} />
+                  <Text style={s.activeText}>ACTIVE</Text>
+                </View>
+              </View>
+              <Text style={s.adaptiveSub}>Rule-based · {adaptive.decisions.length} decision{adaptive.decisions.length === 1 ? '' : 's'} this session</Text>
             </View>
             <View style={s.diffBox}>
               <Text style={s.diffVal}>{adaptive.difficulty}</Text>
@@ -174,11 +226,11 @@ export default function TodaysWorkoutScreen() {
             </View>
           </View>
           {adaptive.decisions.length === 0 ? (
-            <Text style={s.adaptiveEmpty}>Keep training — the engine is learning your habits.</Text>
+            <Text style={s.adaptiveEmpty}>Engine analyzing your habits — keep training to unlock insights.</Text>
           ) : (
             <View style={{ gap: 8, marginTop: 4 }}>
-              {adaptive.decisions.map((d, i) => {
-                const col = SEV_COLOR[d.severity] || C.blue;
+              {adaptive.decisions.slice(0, 3).map((d, i) => {
+                const col = sevColor(d.severity);
                 return (
                   <View key={i} style={[s.decision, { borderColor: col + '33', backgroundColor: col + '0d' }]}>
                     <Text style={[s.decisionTitle, { color: col }]}>{d.title}</Text>
@@ -188,7 +240,10 @@ export default function TodaysWorkoutScreen() {
               })}
             </View>
           )}
-        </View>
+          <View style={s.whyBtn}>
+            <Text style={s.whyText}>Why these decisions?  →</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* ── TODAY'S WORKOUT ── */}
         {!workout ? (
@@ -245,6 +300,153 @@ export default function TodaysWorkoutScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* ── ADAPTIVE COACH — REASONING modal (mirrors web explainability view) ── */}
+      <Modal visible={adaptiveOpen} transparent animationType="slide" onRequestClose={() => setAdaptiveOpen(false)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            {/* accent stripe */}
+            <View style={s.modalStripe} />
+
+            {/* header */}
+            <View style={s.modalHeader}>
+              <View style={s.modalIcon}><Text style={{ fontSize: 18 }}>🧠</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.modalTitle}>ADAPTIVE COACH — REASONING</Text>
+                <Text style={s.modalKicker}>Rule-based decisions · Fully auditable</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAdaptiveOpen(false)} style={s.modalClose}>
+                <Ionicons name="close" size={18} color={C.gray} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={s.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Current State */}
+              <Text style={s.sectionLabel}>CURRENT STATE</Text>
+              <View style={s.stateGrid}>
+                {[
+                  { label: 'STREAK', val: `${adaptive.streak}d`, color: adaptive.streak >= 14 ? C.gold : C.blue },
+                  { label: 'WEEKLY', val: `${adaptive.weeklyPct}%`, color: adaptive.weeklyPct >= 80 ? C.green : adaptive.weeklyPct >= 40 ? C.gold : C.red },
+                  { label: 'DIFFICULTY', val: adaptive.difficulty, color: C.purple },
+                  { label: 'TOTAL', val: adaptive.totalWorkouts, color: C.blue },
+                ].map((t, i) => (
+                  <View key={i} style={[s.stateTile, { backgroundColor: t.color + '10', borderColor: t.color + '25' }]}>
+                    <Text style={[s.stateVal, { color: t.color }]}>{t.val}</Text>
+                    <Text style={s.stateLabel}>{t.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Difficulty Breakdown */}
+              {adaptive.breakdown && (
+                <>
+                  <Text style={s.sectionLabel}>DIFFICULTY BREAKDOWN</Text>
+                  <View style={s.breakdownRow}>
+                    {[
+                      { lbl: `${adaptive.breakdown.level} base`, val: adaptive.breakdown.levelBase.toFixed(1), c: C.purple },
+                      { lbl: 'streak',  val: `+${adaptive.breakdown.streakBonus.toFixed(1)}`,  c: C.blue },
+                      { lbl: 'weekly',  val: `+${adaptive.breakdown.weeklyBonus.toFixed(1)}`,  c: C.green },
+                      { lbl: 'veteran', val: `+${adaptive.breakdown.veteranBonus.toFixed(1)}`, c: C.gold },
+                    ].map((p, i) => (
+                      <View key={i} style={[s.bdTile, { backgroundColor: p.c + '12', borderColor: p.c + '30' }]}>
+                        <Text style={[s.bdVal, { color: p.c }]}>{p.val}</Text>
+                        <Text style={s.bdLbl}>{p.lbl}</Text>
+                      </View>
+                    ))}
+                    <Text style={s.bdEq}>=</Text>
+                    <View style={[s.bdTile, s.bdTotal]}>
+                      <Text style={[s.bdVal, { color: C.purple }]}>{adaptive.breakdown.total}</Text>
+                      <Text style={[s.bdLbl, { color: C.purple }]}>/ 10</Text>
+                    </View>
+                  </View>
+                  <Text style={s.bdNote}>Higher level, longer streaks, better weekly completion, and total workouts each push the load up.</Text>
+                </>
+              )}
+
+              {/* Rules Fired This Session */}
+              <Text style={s.sectionLabel}>RULES FIRED THIS SESSION ({adaptive.decisions.length})</Text>
+              {adaptive.decisions.length === 0 ? (
+                <View style={s.emptyBox}><Text style={s.emptyText}>No rules fired — engine is observing.</Text></View>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  {adaptive.decisions.map((d, i) => {
+                    const col = sevColor(d.severity);
+                    return (
+                      <View key={i} style={[s.ruleCard, { backgroundColor: col + '10', borderColor: col + '25' }]}>
+                        <View style={s.ruleTop}>
+                          <View style={[s.ruleBadge, { backgroundColor: col + '22' }]}>
+                            <Text style={[s.ruleBadgeText, { color: col }]}>{d.rule}</Text>
+                          </View>
+                          <Text style={[s.ruleTitle, { color: col }]} numberOfLines={2}>{d.title}</Text>
+                        </View>
+                        <Text style={s.ruleMsg}>{d.message}</Text>
+                        {RULE_ACTION[d.rule] && (
+                          <View style={s.appliedChip}>
+                            <Text style={s.appliedText}>⚡ APPLIED · {RULE_ACTION[d.rule]}</Text>
+                          </View>
+                        )}
+                        {d.dataUsed && (
+                          <View style={s.dataBox}>
+                            <Text style={s.dataText}><Text style={{ color: col, fontWeight: '700' }}>data: </Text>{JSON.stringify(d.dataUsed)}</Text>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Adaptation Timeline */}
+              {adaptiveLog.length > 0 && (() => {
+                const visibleLog = adaptiveLog.filter(l => ((l.createdAt?.seconds || 0) * 1000) > adaptiveClearedAt);
+                const runs = [];
+                for (const log of visibleLog) {
+                  const last = runs[runs.length - 1];
+                  if (last && last.rule === log.rule && last.title === log.title) last.count++;
+                  else runs.push({ ...log, count: 1 });
+                }
+                return (
+                  <>
+                    <View style={s.timelineHead}>
+                      <Text style={s.sectionLabel}>ADAPTATION TIMELINE</Text>
+                      <TouchableOpacity onPress={clearAdaptiveTimeline} style={s.clearBtn}>
+                        <Text style={s.clearText}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={s.timelineSub}>Every change your coach made to your plan, automatically — newest first.</Text>
+                    {runs.length === 0 ? (
+                      <View style={s.emptyBox}><Text style={s.emptyText}>Timeline cleared — new adaptations will appear here.</Text></View>
+                    ) : (
+                      <View style={{ gap: 5 }}>
+                        {runs.map((log) => {
+                          const col = sevColor(log.severity);
+                          const ms = (log.createdAt?.seconds || 0) * 1000;
+                          return (
+                            <View key={log.id} style={[s.tlRow, { borderLeftColor: col }]}>
+                              <View style={[s.tlDot, { backgroundColor: col }]} />
+                              <Text style={s.tlTitle} numberOfLines={1}>{log.title}</Text>
+                              {log.count > 1 && <Text style={[s.tlCount, { color: col }]}>×{log.count}</Text>}
+                              <Text style={s.tlTime}>{relTime(ms)}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Footer */}
+              <View style={s.footerNote}>
+                <Text style={s.footerText}>
+                  <Text style={{ color: C.purple, fontWeight: '800' }}>How it works: </Text>
+                  The engine evaluates your performance against 7 explicit rules every session. Every decision is logged with the data that triggered it — making the system explainable and auditable.
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -269,6 +471,64 @@ const s = StyleSheet.create({
   decision:     { borderWidth: 1, borderRadius: 12, padding: 12 },
   decisionTitle:{ fontSize: 12, fontWeight: '800', marginBottom: 3 },
   decisionMsg:  { fontSize: 11, color: C.lightGray, lineHeight: 17 },
+  adaptiveTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  activePill:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  activeDot:    { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green },
+  activeText:   { fontSize: 8, fontWeight: '800', color: C.green, letterSpacing: 1 },
+  whyBtn:       { alignSelf: 'flex-start', marginTop: 6, borderWidth: 1, borderColor: C.purple + '59', borderRadius: 50, paddingHorizontal: 14, paddingVertical: 7 },
+  whyText:      { fontSize: 11, fontWeight: '800', color: C.purple, letterSpacing: 0.3 },
+
+  // Reasoning modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'flex-end' },
+  modalCard:    { backgroundColor: C.card, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: C.purple + '4d', maxHeight: '90%', overflow: 'hidden' },
+  modalStripe:  { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: C.purple, zIndex: 2 },
+  modalHeader:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: C.purple + '26' },
+  modalIcon:    { width: 40, height: 40, borderRadius: 11, backgroundColor: C.purple + '26', justifyContent: 'center', alignItems: 'center' },
+  modalTitle:   { fontSize: 15, fontWeight: '900', color: C.white, letterSpacing: 0.4 },
+  modalKicker:  { fontSize: 9, color: C.purple, letterSpacing: 1, fontWeight: '700', marginTop: 3 },
+  modalClose:   { width: 32, height: 32, borderRadius: 9, backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center' },
+  modalBody:    { padding: 20, paddingBottom: 40, gap: 10 },
+  sectionLabel: { fontSize: 9, fontWeight: '800', color: C.purple, letterSpacing: 1.4, marginTop: 8 },
+
+  stateGrid:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  stateTile:    { flexGrow: 1, flexBasis: '22%', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 10 },
+  stateVal:     { fontSize: 20, fontWeight: '900', lineHeight: 22 },
+  stateLabel:   { fontSize: 7, color: C.gray, fontWeight: '800', letterSpacing: 1, marginTop: 3 },
+
+  breakdownRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, backgroundColor: C.purple + '0d', borderWidth: 1, borderColor: C.purple + '2e', borderRadius: 10, padding: 12 },
+  bdTile:       { alignItems: 'center', borderWidth: 1, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, minWidth: 58 },
+  bdVal:        { fontSize: 16, fontWeight: '900', lineHeight: 18 },
+  bdLbl:        { fontSize: 7, color: C.gray, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 3 },
+  bdEq:         { fontSize: 16, color: C.gray, fontWeight: '800' },
+  bdTotal:      { backgroundColor: C.purple + '2e', borderColor: C.purple + '73' },
+  bdNote:       { fontSize: 9, color: C.gray, fontStyle: 'italic', marginTop: 2 },
+
+  emptyBox:     { padding: 18, alignItems: 'center', backgroundColor: C.inputBg, borderRadius: 10, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed' },
+  emptyText:    { fontSize: 11, color: C.gray },
+
+  ruleCard:     { borderWidth: 1, borderRadius: 11, padding: 12 },
+  ruleTop:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' },
+  ruleBadge:    { borderRadius: 50, paddingHorizontal: 8, paddingVertical: 3 },
+  ruleBadgeText:{ fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
+  ruleTitle:    { fontSize: 11, fontWeight: '800', flexShrink: 1 },
+  ruleMsg:      { fontSize: 11, color: C.lightGray, lineHeight: 17, marginBottom: 6 },
+  appliedChip:  { alignSelf: 'flex-start', backgroundColor: C.green + '1a', borderWidth: 1, borderColor: C.green + '4d', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6 },
+  appliedText:  { fontSize: 9, fontWeight: '800', color: C.green, letterSpacing: 0.3 },
+  dataBox:      { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6 },
+  dataText:     { fontSize: 9, color: C.gray, fontFamily: 'monospace' },
+
+  timelineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  clearBtn:     { borderWidth: 1, borderColor: C.border, borderRadius: 50, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8 },
+  clearText:    { fontSize: 9, fontWeight: '700', color: C.gray, letterSpacing: 0.4 },
+  timelineSub:  { fontSize: 10, color: C.gray, lineHeight: 15 },
+  tlRow:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: C.inputBg, borderRadius: 8, borderLeftWidth: 2 },
+  tlDot:        { width: 7, height: 7, borderRadius: 4 },
+  tlTitle:      { flex: 1, fontSize: 11, color: C.lightGray },
+  tlCount:      { fontSize: 9, fontWeight: '800' },
+  tlTime:       { fontSize: 9, color: C.gray },
+
+  footerNote:   { backgroundColor: C.purple + '0f', borderWidth: 1, borderColor: C.purple + '33', borderRadius: 10, padding: 12, marginTop: 8 },
+  footerText:   { fontSize: 10, color: C.lightGray, lineHeight: 16 },
 
   // Rest day
   restCard:  { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 28, alignItems: 'center', gap: 10 },
