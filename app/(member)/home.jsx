@@ -12,16 +12,15 @@ import { auth, db } from '../../firebase';
 import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, increment, runTransaction, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { isClassActive } from '../../lib/classLifecycle';
 import { canBook, computeMembershipState, daysRemaining } from '../../lib/membership';
+import { getMemberLevel, LEVEL_COLOR as ML_COLOR } from '../../lib/memberLevel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 import { C as COLORS } from '../../lib/theme';
 
-const LEVELS       = ['Beginner', 'Intermediate', 'Advanced', 'Expert', 'Elite'];
-const LEVEL_COLORS = {
-  Beginner: '#fb923c', Intermediate: '#F5C842',
-  Advanced: '#4ade80', Expert: '#42a5f5', Elite: '#c084fc',
-};
+// Skill division comes from getMemberLevel (Beginner/Intermediate/Advanced only).
+// WORKOUTS_PER_LEVEL drives the "Workout Milestones" badge bar — pure
+// gamification, NOT the skill level (kept separate so the two never disagree).
 const WORKOUTS_PER_LEVEL = 25;
 
 const TIPS = [
@@ -119,6 +118,7 @@ export default function HomeScreen() {
   const [showTrialWelcome,  setShowTrialWelcome]  = useState(false);
   const [levelChangePopup,  setLevelChangePopup]  = useState(null);
   const [tipIndex,          setTipIndex]          = useState(0);
+  const [trainingLevel,     setTrainingLevel]     = useState(null); // stats.trainingLevel → canonical level
   const tipIndexRef = useRef(0); // keeps PanResponder in sync with current tipIndex
 
   const translateX  = useRef(new Animated.Value(0)).current;
@@ -133,6 +133,17 @@ export default function HomeScreen() {
       if (snap.exists()) setUserData(snap.data());
       setLoading(false);
     }, (err) => { console.error(err); setLoading(false); });
+    return () => unsub();
+  }, []);
+
+  // ── Canonical level needs stats.trainingLevel (mobile training writes it) ──
+  // Live so a level-up from the Training Lab reflects on Home immediately.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'stats', user.uid), snap => {
+      setTrainingLevel(snap.exists() ? (snap.data().trainingLevel ?? null) : null);
+    }, () => {});
     return () => unsub();
   }, []);
 
@@ -176,12 +187,18 @@ export default function HomeScreen() {
   const streak        = userData?.streak        || 0;
   const weeklyPct     = userData?.weeklyPct     || 0;
 
-  const levelIdx     = Math.min(Math.floor(totalWorkouts / WORKOUTS_PER_LEVEL), LEVELS.length - 1);
-  const currentLevel = LEVELS[levelIdx];
-  const nextLevel    = LEVELS[Math.min(levelIdx + 1, LEVELS.length - 1)];
-  const levelPct     = ((totalWorkouts % WORKOUTS_PER_LEVEL) / WORKOUTS_PER_LEVEL) * 100;
-  const toNext       = WORKOUTS_PER_LEVEL - (totalWorkouts % WORKOUTS_PER_LEVEL);
-  const levelColor   = LEVEL_COLORS[currentLevel] || COLORS.gold;
+  // Canonical skill division — ONE level shown everywhere (badge, tag, Skill
+  // Level pill, stats). Reconciles admin-set experience with mobile-earned
+  // trainingLevel; only ever Beginner/Intermediate/Advanced (no Expert/Elite).
+  const memberLevel      = getMemberLevel({ experience: userData?.experience, trainingLevel });
+  const memberLevelColor = ML_COLOR[memberLevel] || COLORS.gold;
+
+  // Workout milestones — pure gamification (a badge every 25 workouts). NOT the
+  // skill level; deliberately uses NO level words so it can't disagree with it.
+  const milestoneFloor = Math.floor(totalWorkouts / WORKOUTS_PER_LEVEL) * WORKOUTS_PER_LEVEL;
+  const nextBadgeAt    = milestoneFloor + WORKOUTS_PER_LEVEL;
+  const levelPct       = ((totalWorkouts % WORKOUTS_PER_LEVEL) / WORKOUTS_PER_LEVEL) * 100;
+  const toNext         = WORKOUTS_PER_LEVEL - (totalWorkouts % WORKOUTS_PER_LEVEL);
 
   const firstName = (userData?.name || 'Athlete').split(' ')[0];
   const initial   = (userData?.name || 'A')[0].toUpperCase();
@@ -529,11 +546,11 @@ export default function HomeScreen() {
               <Text style={styles.welcomeName}>{firstName}!</Text>
             </View>
             <View style={[styles.levelBadge, {
-              backgroundColor: (LEVEL_COLORS[userData?.experience] || levelColor) + '22',
-              borderColor:     (LEVEL_COLORS[userData?.experience] || levelColor) + '66',
+              backgroundColor: memberLevelColor + '22',
+              borderColor:     memberLevelColor + '66',
             }]}>
-              <Text style={[styles.levelBadgeText, { color: LEVEL_COLORS[userData?.experience] || levelColor }]}>
-                {userData?.experience || 'Beginner'}
+              <Text style={[styles.levelBadgeText, { color: memberLevelColor }]}>
+                {memberLevel}
               </Text>
             </View>
           </View>
@@ -541,9 +558,9 @@ export default function HomeScreen() {
           {/* Profile Tags */}
           <View style={styles.tagsRow}>
             {[
-              { label: 'Stance',     val: userData?.stance     || '—', icon: '🥊' },
-              { label: 'Experience', val: userData?.experience || '—', icon: '⭐' },
-              { label: 'Goal',       val: userData?.goal       || '—', icon: '🎯' },
+              { label: 'Stance', val: userData?.stance || '—', icon: '🥊' },
+              { label: 'Level',  val: memberLevel,             icon: '⭐' },
+              { label: 'Goal',   val: userData?.goal   || '—', icon: '🎯' },
             ].map((tag, i) => (
               <View key={i} style={styles.tag}>
                 <Text style={styles.tagLabel}>{tag.label}</Text>
@@ -552,32 +569,28 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* Level Progress */}
-          <View style={{ gap: 8 }}>
+          {/* Workout Milestones — gamification only (a badge every 25 workouts).
+              NOT the skill division; deliberately NO level words so it can never
+              look like it disagrees with the Skill Level pill below. */}
+          <View style={{ gap: 6 }}>
             <View style={styles.levelRow}>
-              <Text style={styles.levelLabel}>{currentLevel} → {nextLevel}</Text>
-              <Text style={[styles.levelPct, { color: levelColor }]}>
-                {levelPct.toFixed(0)}% · {toNext} to go
-              </Text>
+              <Text style={styles.milestoneLabel}>🏅 Workout Milestones</Text>
+              <Text style={[styles.levelPct, { color: COLORS.gold }]}>{toNext} to next badge</Text>
             </View>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, {
-                width: `${levelPct}%`,
-                backgroundColor: levelColor,
-              }]} />
+              <View style={[styles.progressFill, { width: `${levelPct}%`, backgroundColor: COLORS.red }]} />
             </View>
-            <View style={styles.levelDots}>
-              {LEVELS.map((lv, i) => (
-                <View key={i} style={{ alignItems: 'center', gap: 4 }}>
-                  <View style={[styles.levelDot, i <= levelIdx && {
-                    backgroundColor: i < levelIdx ? COLORS.green : levelColor,
-                  }]} />
-                  <Text style={[styles.levelDotLabel, i === levelIdx && { color: levelColor }]}>
-                    {lv.slice(0, 3).toUpperCase()}
-                  </Text>
-                </View>
-              ))}
+            <View style={styles.milestoneFoot}>
+              <Text style={styles.milestoneEnd}>{milestoneFloor}</Text>
+              <Text style={[styles.milestoneEnd, { color: COLORS.gold }]}>{totalWorkouts} workouts</Text>
+              <Text style={styles.milestoneEnd}>🏅 {nextBadgeAt}</Text>
             </View>
+          </View>
+
+          {/* Skill Level — the ONE canonical division (Beginner/Intermediate/Advanced) */}
+          <View style={[styles.skillPill, { backgroundColor: memberLevelColor + '1a', borderColor: memberLevelColor + '55' }]}>
+            <Text style={styles.skillLabel}>SKILL LEVEL</Text>
+            <Text style={[styles.skillVal, { color: memberLevelColor }]}>{memberLevel.toUpperCase()}</Text>
           </View>
         </View>
 
@@ -657,7 +670,7 @@ export default function HomeScreen() {
             {[
               { icon: '🔥', label: 'Streak',    val: `${streak} day${streak !== 1 ? 's' : ''}`, color: streak > 0 ? COLORS.red  : COLORS.gray },
               { icon: '🥊', label: 'Workouts',  val: `${totalWorkouts}`,                         color: COLORS.gold },
-              { icon: '⭐', label: 'Level',      val: currentLevel,                               color: levelColor  },
+              { icon: '⭐', label: 'Level',      val: memberLevel,                                color: memberLevelColor },
               { icon: '📅', label: 'Days/Week', val: `${userData?.daysPerWeek || 0}x`,           color: COLORS.green },
             ].map((stat, i) => (
               <View key={i} style={styles.statItem}>
@@ -1048,6 +1061,14 @@ const styles = StyleSheet.create({
   levelDots:     { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   levelDot:      { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.border },
   levelDotLabel: { fontSize: 8, color: COLORS.gray, fontWeight: '700' },
+
+  // Workout milestones (gamification) + Skill level pill (canonical division)
+  milestoneLabel:{ fontSize: 10, color: COLORS.gray, fontWeight: '800', letterSpacing: 0.4 },
+  milestoneFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  milestoneEnd:  { fontSize: 9, color: COLORS.gray, fontWeight: '700' },
+  skillPill:     { marginTop: 12, borderRadius: 50, borderWidth: 1, paddingVertical: 9, alignItems: 'center' },
+  skillLabel:    { fontSize: 8, fontWeight: '800', color: COLORS.gray, letterSpacing: 1.5 },
+  skillVal:      { fontSize: 16, fontWeight: '900', letterSpacing: 1.5, marginTop: 2 },
 
   // Streak
   streakBanner: {
