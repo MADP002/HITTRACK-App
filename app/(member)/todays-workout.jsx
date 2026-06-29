@@ -13,13 +13,7 @@ import { buildSchedule, exerciseName, isRichExercise } from '../../lib/scheduleB
 import { computeDifficulty, evaluateAdaptations } from '../../lib/adaptiveEngine';
 import { computeTrainingStats, computeWeeklyHistory, computeMissedDays } from '../../lib/trainingStats';
 import { canBook, computeMembershipState } from '../../lib/membership';
-
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842', blue: '#42a5f5', purple: '#c084fc',
-};
+import { C, glow } from '../../lib/theme';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -264,7 +258,7 @@ const s = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingBottom: 50, gap: 14, paddingTop: 14 },
 
   // Adaptive coach
-  adaptiveCard: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.purple + '33', padding: 16, gap: 4 },
+  adaptiveCard: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.purple + '40', padding: 16, gap: 4, ...glow(C.purple) },
   adaptiveTop:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
   adaptiveTitle:{ fontSize: 15, fontWeight: '900', color: C.white },
   adaptiveSub:  { fontSize: 11, color: C.gray, marginTop: 2 },
