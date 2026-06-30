@@ -152,10 +152,12 @@ export default function CoachHomeScreen() {
         <Text style={s.sectionTitle}>Quick Actions</Text>
         <View style={s.actionsGrid}>
           {[
-            { icon: 'people-outline',   label: 'View Clients',       color: C.blue,   route: '/(coach)/clients'       },
-            { icon: 'calendar-outline', label: 'Manage Classes',     color: C.gold,   route: '/(coach)/classes'       },
-            { icon: 'megaphone-outline',label: 'Announcements',      color: C.green,  route: '/(coach)/announcements' },
-            { icon: 'chatbubbles-outline', label: 'Inbox',           color: C.purple, route: '/(coach)/forum'         },
+            { icon: 'people-outline',      label: 'View Clients',   color: C.blue,   route: '/(coach)/clients'       },
+            { icon: 'document-text-outline', label: 'Reports',      color: C.blue,   route: '/(coach)/reports'       },
+            { icon: 'card-outline',        label: 'Memberships',    color: C.green,  route: '/(coach)/memberships'   },
+            { icon: 'calendar-outline',    label: 'Manage Classes', color: C.gold,   route: '/(coach)/classes'       },
+            { icon: 'megaphone-outline',   label: 'Announcements',  color: C.green,  route: '/(coach)/announcements' },
+            { icon: 'chatbubbles-outline', label: 'Inbox',          color: C.purple, route: '/(coach)/forum'         },
           ].map((action, i) => (
             <TouchableOpacity
               key={i}
