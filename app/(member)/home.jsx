@@ -5,26 +5,22 @@ import {
   ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
-import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, deleteDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, where, onSnapshot, addDoc, getDocs, deleteDoc, updateDoc, increment, runTransaction, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { isClassActive } from '../../lib/classLifecycle';
+import { canBook, computeMembershipState, daysRemaining } from '../../lib/membership';
+import { getMemberLevel, LEVEL_COLOR as ML_COLOR } from '../../lib/memberLevel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842',
-};
+import { C as COLORS } from '../../lib/theme';
 
-const LEVELS       = ['Beginner', 'Intermediate', 'Advanced', 'Expert', 'Elite'];
-const LEVEL_COLORS = {
-  Beginner: '#fb923c', Intermediate: '#F5C842',
-  Advanced: '#4ade80', Expert: '#42a5f5', Elite: '#c084fc',
-};
+// Skill division comes from getMemberLevel (Beginner/Intermediate/Advanced only).
+// WORKOUTS_PER_LEVEL drives the "Workout Milestones" badge bar — pure
+// gamification, NOT the skill level (kept separate so the two never disagree).
 const WORKOUTS_PER_LEVEL = 25;
 
 const TIPS = [
@@ -119,7 +115,10 @@ export default function HomeScreen() {
   const [showHiddenFb,      setShowHiddenFb]       = useState(false);
   const [myBookings,        setMyBookings]        = useState([]);
   const [enrollingId,       setEnrollingId]       = useState(null);
+  const [showTrialWelcome,  setShowTrialWelcome]  = useState(false);
+  const [levelChangePopup,  setLevelChangePopup]  = useState(null);
   const [tipIndex,          setTipIndex]          = useState(0);
+  const [trainingLevel,     setTrainingLevel]     = useState(null); // stats.trainingLevel → canonical level
   const tipIndexRef = useRef(0); // keeps PanResponder in sync with current tipIndex
 
   const translateX  = useRef(new Animated.Value(0)).current;
@@ -137,6 +136,17 @@ export default function HomeScreen() {
     return () => unsub();
   }, []);
 
+  // ── Canonical level needs stats.trainingLevel (mobile training writes it) ──
+  // Live so a level-up from the Training Lab reflects on Home immediately.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const unsub = onSnapshot(doc(db, 'stats', user.uid), snap => {
+      setTrainingLevel(snap.exists() ? (snap.data().trainingLevel ?? null) : null);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   // ── Load announcements (real-time) ────────────────────────────────────────
   useEffect(() => {
     try {
@@ -151,20 +161,51 @@ export default function HomeScreen() {
     } catch (e) { console.warn('Announcements error:', e); }
   }, []);
 
+  // ── Dismiss / clear announcements (Firestore-backed, syncs with web) ──────
+  // Web stores cleared ids in users/{uid}.dismissedAnnouncements; we read the
+  // SAME field (via userData, which is a live snapshot) and write it — so
+  // clearing on either app hides the announcement on both.
+  const dismissedAnnouncements = userData?.dismissedAnnouncements || [];
+  const visibleAnnouncements   = announcements.filter(n => !dismissedAnnouncements.includes(n.id));
+
+  const dismissAnnouncement = async (id) => {
+    const u = auth.currentUser;
+    if (!u) return;
+    try { await updateDoc(doc(db, 'users', u.uid), { dismissedAnnouncements: arrayUnion(id) }); }
+    catch (e) { console.warn('Dismiss announcement:', e.message); }
+  };
+  const clearAllAnnouncements = async () => {
+    const u = auth.currentUser;
+    if (!u || visibleAnnouncements.length === 0) return;
+    const ids = visibleAnnouncements.map(n => n.id);
+    try { await updateDoc(doc(db, 'users', u.uid), { dismissedAnnouncements: arrayUnion(...ids) }); }
+    catch (e) { console.warn('Clear announcements:', e.message); }
+  };
+
   // ── Derived stats ─────────────────────────────────────────────────────────
   const totalWorkouts = userData?.totalWorkouts || 0;
   const streak        = userData?.streak        || 0;
   const weeklyPct     = userData?.weeklyPct     || 0;
 
-  const levelIdx     = Math.min(Math.floor(totalWorkouts / WORKOUTS_PER_LEVEL), LEVELS.length - 1);
-  const currentLevel = LEVELS[levelIdx];
-  const nextLevel    = LEVELS[Math.min(levelIdx + 1, LEVELS.length - 1)];
-  const levelPct     = ((totalWorkouts % WORKOUTS_PER_LEVEL) / WORKOUTS_PER_LEVEL) * 100;
-  const toNext       = WORKOUTS_PER_LEVEL - (totalWorkouts % WORKOUTS_PER_LEVEL);
-  const levelColor   = LEVEL_COLORS[currentLevel] || COLORS.gold;
+  // Canonical skill division — ONE level shown everywhere (badge, tag, Skill
+  // Level pill, stats). Reconciles admin-set experience with mobile-earned
+  // trainingLevel; only ever Beginner/Intermediate/Advanced (no Expert/Elite).
+  const memberLevel      = getMemberLevel({ experience: userData?.experience, trainingLevel });
+  const memberLevelColor = ML_COLOR[memberLevel] || COLORS.gold;
+
+  // Workout milestones — pure gamification (a badge every 25 workouts). NOT the
+  // skill level; deliberately uses NO level words so it can't disagree with it.
+  const milestoneFloor = Math.floor(totalWorkouts / WORKOUTS_PER_LEVEL) * WORKOUTS_PER_LEVEL;
+  const nextBadgeAt    = milestoneFloor + WORKOUTS_PER_LEVEL;
+  const levelPct       = ((totalWorkouts % WORKOUTS_PER_LEVEL) / WORKOUTS_PER_LEVEL) * 100;
+  const toNext         = WORKOUTS_PER_LEVEL - (totalWorkouts % WORKOUTS_PER_LEVEL);
 
   const firstName = (userData?.name || 'Athlete').split(' ')[0];
   const initial   = (userData?.name || 'A')[0].toUpperCase();
+
+  // ── Membership gate (mirrors web: expired/paused can't book; stats locked) ──
+  const membershipState  = computeMembershipState(userData?.membership);
+  const membershipLocked = !canBook(userData?.membership);
 
   // Keep tipIndexRef in sync so PanResponder always reads the latest value
   useEffect(() => { tipIndexRef.current = tipIndex; }, [tipIndex]);
@@ -174,22 +215,55 @@ export default function HomeScreen() {
   const handleEnroll = async (cls) => {
     const user = auth.currentUser;
     if (!user) return;
+    // Membership gate — expired/paused members can't book (mirrors web canBook).
+    if (!canBook(userData?.membership)) {
+      Alert.alert('Membership Inactive', 'Your membership is expired or paused. Please contact the gym to renew before booking classes.');
+      return;
+    }
+    // Cheap pre-check for instant UX — the transaction below re-checks atomically.
     if ((cls.enrolled || 0) >= cls.spots) {
       Alert.alert('Class Full', 'This class is fully booked.');
       return;
     }
     setEnrollingId(cls.id);
     try {
-      await addDoc(collection(db, 'bookings'), {
-        classId:   cls.id,
-        className: cls.name,
-        userId:    user.uid,
-        userName:  userData?.name || 'Member',
-        createdAt: serverTimestamp(),
+      // 1. Guard against double-booking (cheap read first).
+      const dupSnap = await getDocs(
+        query(collection(db, 'bookings'), where('userId', '==', user.uid), where('classId', '==', cls.id))
+      );
+      if (!dupSnap.empty) {
+        Alert.alert('Already Enrolled', `You've already booked "${cls.name}".`);
+        return;
+      }
+      // 2. Atomic transaction — re-check spots + create booking + bump count together,
+      //    so two members can't oversell a class (mirrors web doBook, first come first served).
+      await runTransaction(db, async (tx) => {
+        const classRef  = doc(db, 'classes', cls.id);
+        const classSnap = await tx.get(classRef);
+        if (!classSnap.exists()) throw new Error('Class no longer exists');
+        const data     = classSnap.data();
+        const enrolled = data.enrolled || 0;
+        const spots    = data.spots || 0;
+        if (spots > 0 && enrolled >= spots) {
+          throw new Error(`SOLD_OUT:"${cls.name}" filled up while you were booking.`);
+        }
+        tx.update(classRef, { enrolled: increment(1) });
+        const bookingRef = doc(collection(db, 'bookings'));
+        tx.set(bookingRef, {
+          classId:   cls.id,
+          className: cls.name,
+          userId:    user.uid,
+          userName:  userData?.name || 'Member',
+          createdAt: serverTimestamp(),
+        });
       });
-      await updateDoc(doc(db, 'classes', cls.id), { enrolled: increment(1) });
-    } catch (e) { Alert.alert('Error', 'Could not enroll. Please try again.'); }
-    setEnrollingId(null);
+    } catch (e) {
+      const msg = String(e?.message || '');
+      if (msg.startsWith('SOLD_OUT:')) Alert.alert('Class Full', msg.replace('SOLD_OUT:', ''));
+      else Alert.alert('Error', 'Could not enroll. Please try again.');
+    } finally {
+      setEnrollingId(null);
+    }
   };
 
   const handleUnenroll = async (cls) => {
@@ -276,6 +350,43 @@ export default function HomeScreen() {
     return () => unsub();
   }, []);
 
+  // ── Free-trial welcome popup (once per account, mirrors web) ──────────────
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !userData) return;
+    if (computeMembershipState(userData.membership) !== 'trial') return;
+    const key = `hittrack_trial_welcomed_${uid}`;
+    AsyncStorage.getItem(key).then(seen => {
+      if (!seen) { setShowTrialWelcome(true); AsyncStorage.setItem(key, '1').catch(() => {}); }
+    }).catch(() => {});
+  }, [userData]);
+
+  // ── Level-change celebration (coach/admin promoted you) ───────────────────
+  //  Mirrors web: watches level_change notifications for this user and shows a
+  //  one-time congrats. Dedup via AsyncStorage so it never re-pops.
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    const q = query(
+      collection(db, 'notifications'),
+      where('targetUserId', '==', user.uid),
+      where('type', '==', 'level_change')
+    );
+    const unsub = onSnapshot(q, async (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      if (docs.length === 0) return;
+      const latest = docs[0];
+      const seenKey = 'hittrack_seen_level_changes';
+      let seen = [];
+      try { seen = JSON.parse((await AsyncStorage.getItem(seenKey)) || '[]'); } catch (e) {}
+      if (seen.includes(latest.id)) return;
+      setLevelChangePopup(latest);
+      try { await AsyncStorage.setItem(seenKey, JSON.stringify([...seen, latest.id])); } catch (e) {}
+    }, (err) => console.warn('Level change watcher:', err));
+    return () => unsub();
+  }, []);
+
   // ── Tip swipe animation ───────────────────────────────────────────────────
   const animateToTip = (nextIdx, direction) => {
     const outX = direction === 'next' ? -SCREEN_WIDTH : SCREEN_WIDTH;
@@ -345,26 +456,33 @@ export default function HomeScreen() {
                 <Ionicons name="megaphone" size={16} color={COLORS.gold} />
                 <Text style={styles.announcementTitle}>Announcements</Text>
               </View>
-              {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{announcements.filter(a => !viewedIds.has(a.id)).length}</Text>
-                </View>
-              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length}</Text>
+                  </View>
+                )}
+                {visibleAnnouncements.length > 0 && (
+                  <TouchableOpacity onPress={clearAllAnnouncements} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={styles.clearAllText}>Clear all</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            {announcements.length === 0 ? (
+            {visibleAnnouncements.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={{ fontSize: 32 }}>📭</Text>
-                <Text style={styles.emptyText}>No announcements yet.</Text>
+                <Text style={styles.emptyText}>You're all caught up.</Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
-                {announcements.map((n, i) => {
+                {visibleAnnouncements.map((n, i) => {
                   const isViewed = viewedIds.has(n.id);
                   return (
                     <TouchableOpacity
                       key={n.id}
-                      style={[styles.announcementItem, i < announcements.length - 1 && styles.itemBorder, !isViewed && styles.announcementItemUnread]}
+                      style={[styles.announcementItem, i < visibleAnnouncements.length - 1 && styles.itemBorder, !isViewed && styles.announcementItemUnread]}
                       onPress={() => markViewed(n.id)}
                       activeOpacity={0.8}
                     >
@@ -378,6 +496,9 @@ export default function HomeScreen() {
                         <Text style={styles.itemFrom}>From: {n.from || 'Admin'}</Text>
                       </View>
                       {!isViewed && <View style={styles.unreadDotSmall} />}
+                      <TouchableOpacity onPress={() => dismissAnnouncement(n.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 6 }}>
+                        <Ionicons name="close" size={16} color={COLORS.gray} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   );
                 })}
@@ -399,10 +520,10 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => setShowAnnouncements(true)}>
             <Ionicons name="megaphone-outline" size={22} color={COLORS.lightGray} />
-            {announcements.filter(a => !viewedIds.has(a.id)).length > 0 && (
+            {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 0 && (
               <View style={styles.notifDot}>
                 <Text style={styles.notifDotText}>
-                  {announcements.filter(a => !viewedIds.has(a.id)).length > 9 ? '9+' : announcements.filter(a => !viewedIds.has(a.id)).length}
+                  {visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length > 9 ? '9+' : visibleAnnouncements.filter(a => !viewedIds.has(a.id)).length}
                 </Text>
               </View>
             )}
@@ -425,11 +546,11 @@ export default function HomeScreen() {
               <Text style={styles.welcomeName}>{firstName}!</Text>
             </View>
             <View style={[styles.levelBadge, {
-              backgroundColor: (LEVEL_COLORS[userData?.experience] || levelColor) + '22',
-              borderColor:     (LEVEL_COLORS[userData?.experience] || levelColor) + '66',
+              backgroundColor: memberLevelColor + '22',
+              borderColor:     memberLevelColor + '66',
             }]}>
-              <Text style={[styles.levelBadgeText, { color: LEVEL_COLORS[userData?.experience] || levelColor }]}>
-                {userData?.experience || 'Beginner'}
+              <Text style={[styles.levelBadgeText, { color: memberLevelColor }]}>
+                {memberLevel}
               </Text>
             </View>
           </View>
@@ -437,9 +558,9 @@ export default function HomeScreen() {
           {/* Profile Tags */}
           <View style={styles.tagsRow}>
             {[
-              { label: 'Stance',     val: userData?.stance     || '—', icon: '🥊' },
-              { label: 'Experience', val: userData?.experience || '—', icon: '⭐' },
-              { label: 'Goal',       val: userData?.goal       || '—', icon: '🎯' },
+              { label: 'Stance', val: userData?.stance || '—', icon: '🥊' },
+              { label: 'Level',  val: memberLevel,             icon: '⭐' },
+              { label: 'Goal',   val: userData?.goal   || '—', icon: '🎯' },
             ].map((tag, i) => (
               <View key={i} style={styles.tag}>
                 <Text style={styles.tagLabel}>{tag.label}</Text>
@@ -448,32 +569,28 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* Level Progress */}
-          <View style={{ gap: 8 }}>
+          {/* Workout Milestones — gamification only (a badge every 25 workouts).
+              NOT the skill division; deliberately NO level words so it can never
+              look like it disagrees with the Skill Level pill below. */}
+          <View style={{ gap: 6 }}>
             <View style={styles.levelRow}>
-              <Text style={styles.levelLabel}>{currentLevel} → {nextLevel}</Text>
-              <Text style={[styles.levelPct, { color: levelColor }]}>
-                {levelPct.toFixed(0)}% · {toNext} to go
-              </Text>
+              <Text style={styles.milestoneLabel}>🏅 Workout Milestones</Text>
+              <Text style={[styles.levelPct, { color: COLORS.gold }]}>{toNext} to next badge</Text>
             </View>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, {
-                width: `${levelPct}%`,
-                backgroundColor: levelColor,
-              }]} />
+              <View style={[styles.progressFill, { width: `${levelPct}%`, backgroundColor: COLORS.red }]} />
             </View>
-            <View style={styles.levelDots}>
-              {LEVELS.map((lv, i) => (
-                <View key={i} style={{ alignItems: 'center', gap: 4 }}>
-                  <View style={[styles.levelDot, i <= levelIdx && {
-                    backgroundColor: i < levelIdx ? COLORS.green : levelColor,
-                  }]} />
-                  <Text style={[styles.levelDotLabel, i === levelIdx && { color: levelColor }]}>
-                    {lv.slice(0, 3).toUpperCase()}
-                  </Text>
-                </View>
-              ))}
+            <View style={styles.milestoneFoot}>
+              <Text style={styles.milestoneEnd}>{milestoneFloor}</Text>
+              <Text style={[styles.milestoneEnd, { color: COLORS.gold }]}>{totalWorkouts} workouts</Text>
+              <Text style={styles.milestoneEnd}>🏅 {nextBadgeAt}</Text>
             </View>
+          </View>
+
+          {/* Skill Level — the ONE canonical division (Beginner/Intermediate/Advanced) */}
+          <View style={[styles.skillPill, { backgroundColor: memberLevelColor + '1a', borderColor: memberLevelColor + '55' }]}>
+            <Text style={styles.skillLabel}>SKILL LEVEL</Text>
+            <Text style={[styles.skillVal, { color: memberLevelColor }]}>{memberLevel.toUpperCase()}</Text>
           </View>
         </View>
 
@@ -501,6 +618,26 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
+
+        {/* ── TODAY'S WORKOUT BUTTON ── */}
+        <TouchableOpacity
+          style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', backgroundColor:'#0e1a14', borderRadius:18, padding:18, borderWidth:1.5, borderColor:'#4ade8055' }}
+          onPress={() => router.push('/(member)/todays-workout')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection:'row', alignItems:'center', gap:14, flex:1 }}>
+            <View style={{ width:52, height:52, borderRadius:14, backgroundColor:'#4ade8022', justifyContent:'center', alignItems:'center' }}>
+              <Text style={{ fontSize:26 }}>📋</Text>
+            </View>
+            <View style={{ flex:1 }}>
+              <Text style={{ fontSize:18, fontWeight:'900', color:'#fff' }}>Today's Workout</Text>
+              <Text style={{ fontSize:12, color:'#888', marginTop:2 }}>Your program + Adaptive Coach</Text>
+            </View>
+          </View>
+          <View style={{ width:36, height:36, borderRadius:18, backgroundColor:'#4ade8022', justifyContent:'center', alignItems:'center' }}>
+            <Text style={{ fontSize:18, color:'#4ade80', fontWeight:'900' }}>→</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* ── TRAINING LAB BUTTON ── */}
         <TouchableOpacity
@@ -533,7 +670,7 @@ export default function HomeScreen() {
             {[
               { icon: '🔥', label: 'Streak',    val: `${streak} day${streak !== 1 ? 's' : ''}`, color: streak > 0 ? COLORS.red  : COLORS.gray },
               { icon: '🥊', label: 'Workouts',  val: `${totalWorkouts}`,                         color: COLORS.gold },
-              { icon: '⭐', label: 'Level',      val: currentLevel,                               color: levelColor  },
+              { icon: '⭐', label: 'Level',      val: memberLevel,                                color: memberLevelColor },
               { icon: '📅', label: 'Days/Week', val: `${userData?.daysPerWeek || 0}x`,           color: COLORS.green },
             ].map((stat, i) => (
               <View key={i} style={styles.statItem}>
@@ -545,6 +682,16 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
+
+          {membershipLocked && (
+            <View style={styles.statsLock}>
+              <Ionicons name="lock-closed" size={24} color={COLORS.gold} />
+              <Text style={styles.statsLockTitle}>
+                {membershipState === 'paused' ? 'Membership Paused' : 'Membership Expired'}
+              </Text>
+              <Text style={styles.statsLockSub}>Renew with the gym to view your stats</Text>
+            </View>
+          )}
         </View>
 
         {/* ── COACH FEEDBACK ── */}
@@ -738,6 +885,71 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* ── FREE-TRIAL WELCOME POPUP ── */}
+      <Modal visible={showTrialWelcome} transparent animationType="fade" onRequestClose={() => setShowTrialWelcome(false)}>
+        <View style={styles.popupOverlay}>
+          <View style={styles.trialCard}>
+            <View style={styles.trialAccent} />
+            <Text style={{ fontSize: 46 }}>🎉</Text>
+            <Text style={styles.popupTitle}>WELCOME TO HITTRACK!</Text>
+            <View style={styles.trialBadge}>
+              <Text style={styles.trialBadgeLabel}>FREE TRIAL</Text>
+              <Text style={styles.trialBadgeDays}>
+                {(() => {
+                  const d = daysRemaining(userData?.membership);
+                  return d != null && d >= 0 ? `${d} day${d === 1 ? '' : 's'} left` : '7 days';
+                })()}
+              </Text>
+            </View>
+            <Text style={styles.popupBody}>
+              You're on a 7-day free trial. Book classes, track your workouts, and explore everything HITTRACK offers. When your trial ends, speak with the gym admin to continue your membership.
+            </Text>
+            <TouchableOpacity style={styles.trialBtn} onPress={() => setShowTrialWelcome(false)} activeOpacity={0.85}>
+              <Text style={styles.trialBtnText}>Let's Go 🥊</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── LEVEL-CHANGE CELEBRATION POPUP ── */}
+      <Modal visible={!!levelChangePopup} transparent animationType="fade" onRequestClose={() => setLevelChangePopup(null)}>
+        {levelChangePopup && (() => {
+          const oldLv = levelChangePopup.oldLevel || 'Beginner';
+          const newLv = levelChangePopup.newLevel || 'Beginner';
+          const ORDER = ['Beginner', 'Intermediate', 'Advanced'];
+          const isPromote = ORDER.indexOf(newLv) > ORDER.indexOf(oldLv);
+          const lvColors = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#22c55e' };
+          const lvIcons  = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
+          const lc = lvColors[newLv] || COLORS.gold;
+          return (
+            <View style={styles.popupOverlay}>
+              <View style={[styles.levelCard, { borderColor: lc + '55' }]}>
+                <Text style={{ fontSize: 44 }}>{isPromote ? '🎉' : '🎚'}</Text>
+                <Text style={[styles.lvlTitle, { color: lc }]}>{isPromote ? 'LEVELED UP!' : 'LEVEL UPDATED'}</Text>
+                <Text style={styles.lvlBy}>By {levelChangePopup.from || 'Your Coach'}</Text>
+                <View style={styles.lvlRow}>
+                  <View style={{ alignItems: 'center', opacity: 0.4 }}>
+                    <View style={styles.lvlOldCircle}><Text style={{ fontSize: 24 }}>{lvIcons[oldLv] || '🥊'}</Text></View>
+                    <Text style={styles.lvlOldLabel}>{oldLv.toUpperCase()}</Text>
+                  </View>
+                  <Text style={{ fontSize: 22, color: lc }}>{isPromote ? '➡' : '⬅'}</Text>
+                  <View style={{ alignItems: 'center' }}>
+                    <View style={[styles.lvlNewCircle, { backgroundColor: lc, borderColor: lc }]}><Text style={{ fontSize: 28 }}>{lvIcons[newLv] || '🥊'}</Text></View>
+                    <Text style={[styles.lvlNewLabel, { color: lc }]}>{newLv.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <Text style={styles.popupBody}>
+                  {levelChangePopup.message || `You're now ${newLv}. Your training plan and leaderboard division have been updated.`}
+                </Text>
+                <TouchableOpacity style={[styles.lvlBtn, { backgroundColor: lc }]} onPress={() => setLevelChangePopup(null)} activeOpacity={0.85}>
+                  <Text style={styles.lvlBtnText}>🥊 LET'S GO!</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })()}
+      </Modal>
+
 
     </SafeAreaView>
   );
@@ -793,6 +1005,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2,
   },
   badgeText:  { fontSize: 11, color: COLORS.white, fontWeight: '700' },
+  clearAllText: { fontSize: 11, color: COLORS.red, fontWeight: '800', letterSpacing: 0.3 },
   emptyBox:   { padding: 32, alignItems: 'center', gap: 8 },
   emptyText:  { fontSize: 13, color: COLORS.gray },
   announcementItem: {
@@ -849,6 +1062,14 @@ const styles = StyleSheet.create({
   levelDot:      { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.border },
   levelDotLabel: { fontSize: 8, color: COLORS.gray, fontWeight: '700' },
 
+  // Workout milestones (gamification) + Skill level pill (canonical division)
+  milestoneLabel:{ fontSize: 10, color: COLORS.gray, fontWeight: '800', letterSpacing: 0.4 },
+  milestoneFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  milestoneEnd:  { fontSize: 9, color: COLORS.gray, fontWeight: '700' },
+  skillPill:     { marginTop: 12, borderRadius: 50, borderWidth: 1, paddingVertical: 9, alignItems: 'center' },
+  skillLabel:    { fontSize: 8, fontWeight: '800', color: COLORS.gray, letterSpacing: 1.5 },
+  skillVal:      { fontSize: 16, fontWeight: '900', letterSpacing: 1.5, marginTop: 2 },
+
   // Streak
   streakBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -865,8 +1086,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', gap: 16, alignItems: 'center',
     backgroundColor: COLORS.card, borderRadius: 20,
     padding: 18, borderWidth: 1, borderColor: COLORS.border,
+    position: 'relative', overflow: 'hidden',
   },
   ringTitle: { fontSize: 11, color: COLORS.gray, fontWeight: '700', textAlign: 'center' },
+  statsLock: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(22,22,22,0.96)',
+    justifyContent: 'center', alignItems: 'center', gap: 4, padding: 16,
+  },
+  statsLockTitle: { fontSize: 14, fontWeight: '800', color: COLORS.white },
+  statsLockSub:   { fontSize: 11, color: COLORS.gray, textAlign: 'center' },
   statItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: COLORS.inputBg, borderRadius: 10,
@@ -970,4 +1199,51 @@ const styles = StyleSheet.create({
   fbExerciseTag:  { backgroundColor: COLORS.bg, borderRadius: 50, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 9, paddingVertical: 3 },
   fbExerciseTagText: { fontSize: 10, color: COLORS.gray, fontWeight: '600' },
   fbExpandHint: { fontSize: 10, color: COLORS.gold, fontWeight: '700' },
+
+  // Celebration / welcome popups
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.88)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  popupTitle: { fontSize: 22, fontWeight: '900', color: COLORS.white, textAlign: 'center', letterSpacing: 0.5 },
+  popupBody:  { fontSize: 13, color: COLORS.lightGray, textAlign: 'center', lineHeight: 20 },
+
+  trialCard: {
+    width: '100%', maxWidth: 380, backgroundColor: '#14110f',
+    borderRadius: 22, borderWidth: 1.5, borderColor: 'rgba(66,165,245,0.4)',
+    padding: 28, alignItems: 'center', gap: 14, overflow: 'hidden',
+  },
+  trialAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 5, backgroundColor: '#42a5f5' },
+  trialBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 50,
+    backgroundColor: 'rgba(66,165,245,0.12)', borderWidth: 1, borderColor: 'rgba(66,165,245,0.35)',
+  },
+  trialBadgeLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: '#42a5f5' },
+  trialBadgeDays:  { fontSize: 11, fontWeight: '700', color: '#cdd5dc' },
+  trialBtn: {
+    width: '100%', backgroundColor: '#42a5f5', borderRadius: 50,
+    paddingVertical: 14, alignItems: 'center', marginTop: 4,
+  },
+  trialBtnText: { fontSize: 14, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+
+  levelCard: {
+    width: '100%', maxWidth: 400, backgroundColor: '#14110f',
+    borderRadius: 24, borderWidth: 2, padding: 28, alignItems: 'center', gap: 12,
+  },
+  lvlTitle: { fontSize: 26, fontWeight: '900', letterSpacing: 1, textAlign: 'center' },
+  lvlBy:    { fontSize: 10, color: COLORS.gray, letterSpacing: 1, fontWeight: '700', textTransform: 'uppercase' },
+  lvlRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginVertical: 8 },
+  lvlOldCircle: {
+    width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 6,
+  },
+  lvlOldLabel: { fontSize: 9, color: '#666', fontWeight: '800', letterSpacing: 1 },
+  lvlNewCircle: {
+    width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, marginBottom: 6,
+  },
+  lvlNewLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  lvlBtn: { width: '100%', borderRadius: 50, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
+  lvlBtnText: { fontSize: 13, fontWeight: '800', color: '#000', letterSpacing: 1 },
 });

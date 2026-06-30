@@ -8,16 +8,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { generateTrainingProgram, PROGRAM_TEMPLATES, MOVEMENT_LIBRARY } from '../../lib/trainingPrograms';
+import { buildSchedule, exerciseName } from '../../lib/scheduleBuilder';
 import { auth, db } from '../../firebase';
 
 const { width } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', redDark: '#C1121F',
-  white: '#FFFFFF', gray: '#888888', lightGray: '#CCCCCC',
-  inputBg: '#1E1E1E', green: '#4ade80', errorBg: '#2A1215',
-};
+import { C as COLORS } from '../../lib/theme';
 
 // ── CONSTANTS (mirrors web version) ──────────────────────────────────────────
 
@@ -634,6 +630,12 @@ function GeneratingScreen({ form }) {
 // ── DONE SCREEN ───────────────────────────────────────────────────────────────
 function DoneScreen({ form, bmi, bmiLabel, bmiColor, router }) {
   const program = PROGRAMS[form.experience]?.[form.goal] || PROGRAMS['Beginner']['Learn Boxing'];
+  // Sample of the "Today's Workout" the schedule builder generates from this plan —
+  // so the member sees it's part of their program, not something out of nowhere.
+  const sampleWorkout = buildSchedule(
+    { experience: form.experience, goal: form.goal, daysPerWeek: form.daysPerWeek, weeklyProgram: program },
+    new Date()
+  ).find((d) => d.workout)?.workout;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -677,6 +679,21 @@ function DoneScreen({ form, bmi, bmiLabel, bmiColor, router }) {
               <Text style={styles.programDay}>Day {i + 1}</Text>
             </View>
           ))}
+
+          {sampleWorkout && (
+            <>
+              <Text style={[styles.summaryTitle, { marginTop: 18, marginBottom: 4 }]}>TODAY'S WORKOUT PREVIEW</Text>
+              <Text style={styles.previewNote}>A sample of what "Today's Workout" generates from your plan — separate from the camera Training Lab.</Text>
+              {(sampleWorkout.exercises || []).map((ex, i) => (
+                <View key={`tw${i}`} style={[styles.programRow, i < sampleWorkout.exercises.length - 1 && styles.programRowBorder]}>
+                  <View style={[styles.programNum, { backgroundColor: '#0d2b1e', borderColor: COLORS.green + '55', borderWidth: 1 }]}>
+                    <Ionicons name="barbell-outline" size={13} color={COLORS.green} />
+                  </View>
+                  <Text style={styles.programEx}>{exerciseName(ex)}</Text>
+                </View>
+              ))}
+            </>
+          )}
         </View>
 
         {/* Lock notice */}
@@ -935,6 +952,7 @@ const styles = StyleSheet.create({
   programNumText: { fontSize: 11, fontWeight: '700', color: COLORS.red },
   programEx: { flex: 1, fontSize: 13, color: COLORS.white, fontWeight: '500' },
   programDay: { fontSize: 11, color: COLORS.gray },
+  previewNote: { fontSize: 11, color: COLORS.gray, lineHeight: 16, marginBottom: 8, fontStyle: 'italic' },
   lockNotice: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: '#2A1215', borderRadius: 12,

@@ -7,15 +7,10 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E', errorBg: '#2A1215',
-  gold: '#F5C842', blue: '#42a5f5', green: '#4ade80', orange: '#fb923c',
-};
+import { C } from '../../lib/theme';
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -149,10 +144,40 @@ export default function SignUpScreen() {
           [{ text: 'Go to Login', onPress: () => router.replace('/(auth)/login') }]
         );
       } else {
-        // Member — go to program builder
+        // Member — seed the 7-day trial + one-trial-per-email stamp, mirroring
+        // web Signup.jsx so members created on mobile get a real membership and
+        // the trial-per-email rule holds across both apps.
+        const normalizedEmail = form.email.trim().toLowerCase();
+
+        // Trial abuse protection: each email gets ONE free trial, tracked in
+        // /trialUsage/{email} (immutable, survives account deletion).
+        const trialDocRef = doc(db, 'trialUsage', normalizedEmail);
+        let trialAlreadyClaimed = false;
+        try {
+          const trialDoc = await getDoc(trialDocRef);
+          trialAlreadyClaimed = trialDoc.exists();
+        } catch (e) {
+          // If we can't read, fail closed — no trial (safer).
+          console.warn('Trial-usage check failed:', e.message);
+          trialAlreadyClaimed = true;
+        }
+
+        const TRIAL_DAYS = 7;
+        const trialEnd = new Date(Date.now() + TRIAL_DAYS * 86400000);
+
+        if (!trialAlreadyClaimed) {
+          try {
+            await setDoc(trialDocRef, {
+              email: normalizedEmail,
+              claimedAt: serverTimestamp(),
+              claimedByName: fullName,
+            });
+          } catch (e) { console.warn('Could not stamp trial usage:', e.message); }
+        }
+
         await setDoc(doc(db, 'users', uid), {
-          uid, name: fullName, email: form.email.trim(),
-          role: 'member', programSetupDone: false,
+          uid, name: fullName, email: normalizedEmail,
+          role: 'member', status: 'active', programSetupDone: false,
           dob: dobStr,
           createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
           age: age ?? null,
@@ -161,6 +186,18 @@ export default function SignUpScreen() {
           height: null, injuries: [], nickname: null,
           programGeneratedAt: null, stance: null, weight: null,
           weeklyProgram: null, weeklyPct: 0, streak: 0, totalWorkouts: 0,
+          membership: trialAlreadyClaimed ? {
+            // No trial — must pay before access (bookings/leaderboard/stats locked).
+            trialStartedAt: null, trialEndsAt: null, trialUsed: true,
+            startedAt: null, expiresAt: null, pausedAt: null,
+            totalPauseDays: 0, lastRenewedAt: null, lastRenewedBy: null,
+            lastRenewedByName: null, previouslyClaimedTrial: true,
+          } : {
+            trialStartedAt: serverTimestamp(), trialEndsAt: trialEnd, trialUsed: true,
+            startedAt: null, expiresAt: trialEnd, pausedAt: null,
+            totalPauseDays: 0, lastRenewedAt: null, lastRenewedBy: null,
+            lastRenewedByName: null,
+          },
         });
         router.replace({ pathname: '/(auth)/program-builder', params: { name: fullName } });
       }

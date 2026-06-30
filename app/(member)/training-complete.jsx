@@ -18,15 +18,10 @@ import { getLevelLabel, getNextLevel, getLevelStars } from '../../lib/trainingPr
 const CLOUDINARY_CLOUD_NAME   = 'dthdcmisj';    // e.g. 'hittrack'
 const CLOUDINARY_UPLOAD_PRESET = 'hittrack_videos'; // e.g. 'hittrack_videos'
 
-const C = {
-  bg: '#000000', card: '#111111', border: '#1E1E1E',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  gold: '#F5C842', green: '#4ade80', blue: '#42a5f5',
-  lightGray: '#CCCCCC', inputBg: '#1A1A1A', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 // ── Save session + mark training complete in Firestore ────────────
-async function completeTraining({ uid, trainingId, level, properReps, duration }) {
+async function completeTraining({ uid, trainingId, level, properReps, duration, requiredReps }) {
   try {
     console.log(`[completeTraining] called with trainingId="${trainingId}" level="${level}" properReps=${properReps}`);
     const workRef  = doc(db, 'workouts', uid);
@@ -46,30 +41,32 @@ async function completeTraining({ uid, trainingId, level, properReps, duration }
       return { leveledUp: false };
     }
 
-    // Mark this training as completed at this level
+    // RESUME: accumulate reps across sessions. Each session's reps add to a
+    // running tally (repProgress) for this training+level; the level only
+    // completes once the CUMULATIVE total reaches the target. So a member can
+    // chip away over several sittings instead of needing the whole target in
+    // one go — which the strict camera detection makes nearly impossible.
+    let reachedTarget = false;
     const idx = program.findIndex(t => t.id === trainingId);
-    console.log(`[completeTraining] findIndex result: idx=${idx}`);
     if (idx !== -1) {
-      const completed = program[idx].completedLevels || [];
-      console.log(`[completeTraining] existing completedLevels for "${trainingId}":`, completed);
-      if (!completed.includes(level)) {
-        program[idx] = {
-          ...program[idx],
-          completedLevels: [...completed, level],
-        };
-        console.log(`[completeTraining] added "${level}" to completedLevels — now:`, program[idx].completedLevels);
-      } else {
-        console.log(`[completeTraining] level "${level}" was ALREADY in completedLevels — no change made`);
-      }
-      // Unlock next training
-      if (idx + 1 < program.length) {
-        program[idx + 1] = { ...program[idx + 1], unlocked: true };
-        console.log(`[completeTraining] unlocked next training: "${program[idx + 1].id}"`);
-      } else {
-        console.log('[completeTraining] this was the LAST training in the program — nothing to unlock');
+      const completed    = program[idx].completedLevels || [];
+      const prevProgress = program[idx].repProgress?.[level] || 0;
+      const newProgress  = prevProgress + (properReps || 0);
+      reachedTarget = (requiredReps || 0) > 0 && newProgress >= requiredReps;
+      program[idx] = {
+        ...program[idx],
+        // keep the running tally; reset to 0 once the level is complete
+        repProgress: { ...(program[idx].repProgress || {}), [level]: reachedTarget ? 0 : newProgress },
+      };
+      console.log(`[completeTraining] ${trainingId}/${level}: +${properReps} reps -> ${reachedTarget ? 'COMPLETE' : `${newProgress}/${requiredReps}`}`);
+      if (reachedTarget && !completed.includes(level)) {
+        program[idx] = { ...program[idx], completedLevels: [...completed, level] };
+        if (idx + 1 < program.length) {
+          program[idx + 1] = { ...program[idx + 1], unlocked: true };
+        }
       }
     } else {
-      console.log(`[completeTraining] !!! trainingId "${trainingId}" was NOT FOUND in the program — nothing was marked complete or unlocked !!!`);
+      console.log(`[completeTraining] !!! trainingId "${trainingId}" NOT FOUND in program !!!`);
     }
 
     // Check if all trainings are complete at this level
@@ -252,7 +249,7 @@ export default function TrainingCompleteScreen() {
     hasCompletedRef.current = true;
 
     Promise.all([
-      completeTraining({ uid: user.uid, trainingId, level, properReps, duration }),
+      completeTraining({ uid: user.uid, trainingId, level, properReps, duration, requiredReps }),
       getDocs(collection(db, 'users')),
     ]).then(([result, usersSnap]) => {
       setLeveledUp(result.leveledUp);
@@ -466,6 +463,14 @@ export default function TrainingCompleteScreen() {
               </View>
             </View>
           )}
+
+          {/* ── VIEW TRAINING REPORT ── */}
+          <TouchableOpacity
+            style={{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, backgroundColor:'#1E1E1E', borderWidth:1, borderColor:'#2A2A2A', borderRadius:14, paddingVertical:14, marginBottom:10 }}
+            onPress={() => router.push('/(member)/training-report')} activeOpacity={0.85}>
+            <Ionicons name="bar-chart-outline" size={18} color="#F5C842" />
+            <Text style={{ fontSize:14, fontWeight:'800', color:'#F5C842' }}>View Training Report</Text>
+          </TouchableOpacity>
 
           {/* ── PROCEED BUTTON ── */}
           <TouchableOpacity style={s.proceedBtn} onPress={handleProceed} activeOpacity={0.85}>

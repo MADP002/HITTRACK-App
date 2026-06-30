@@ -14,12 +14,7 @@ import {
 } from 'firebase/firestore';
 import { ACTIVITY_TYPES } from '../../lib/activityLog';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  blue: '#42a5f5', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842', red: '#E63946',
-};
+import { C } from '../../lib/theme';
 
 const SYSTEM_EVENT_TYPES = [
   'booking_created','booking_cancelled','class_created','class_deleted',

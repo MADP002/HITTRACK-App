@@ -9,15 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { canBook, computeMembershipState } from '../../lib/membership';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842',
-};
+import { C as COLORS } from '../../lib/theme';
 
 const LEVEL_COLOR  = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
 const LEVEL_ICON   = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
@@ -352,6 +348,10 @@ export default function LeaderboardScreen() {
 
   const divsToShow = activeDiv === 'All' ? DIVISIONS : [activeDiv];
 
+  // Membership gate — expired/paused members can't view the leaderboard (mirrors web blur/lock).
+  const myState = computeMembershipState(myUser?.membership);
+  const locked  = !!myUser && !canBook(myUser.membership);
+
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <ScrollView
@@ -469,6 +469,16 @@ export default function LeaderboardScreen() {
             <ActivityIndicator size="large" color={COLORS.red} />
             <Text style={styles.loadingText}>Loading leaderboard...</Text>
           </View>
+        ) : locked ? (
+          <View style={styles.lbLock}>
+            <Ionicons name="lock-closed" size={40} color={COLORS.gold} />
+            <Text style={styles.lbLockTitle}>
+              {myState === 'paused' ? 'Membership Paused' : 'Membership Expired'}
+            </Text>
+            <Text style={styles.lbLockSub}>
+              Renew your membership with the gym to view the leaderboard.
+            </Text>
+          </View>
         ) : (
           divsToShow.map(div => (
             <DivisionSection
@@ -548,6 +558,15 @@ const styles = StyleSheet.create({
   // Loading
   loadingBox:  { padding: 60, alignItems: 'center', gap: 12 },
   loadingText: { fontSize: 13, color: COLORS.gray },
+
+  // Membership lock
+  lbLock: {
+    backgroundColor: COLORS.card, borderRadius: 16,
+    padding: 40, alignItems: 'center', gap: 12,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  lbLockTitle: { fontSize: 16, fontWeight: '900', color: COLORS.white },
+  lbLockSub:   { fontSize: 12, color: COLORS.gray, textAlign: 'center', lineHeight: 18 },
 
   // Division section
   divSection: { gap: 14 },

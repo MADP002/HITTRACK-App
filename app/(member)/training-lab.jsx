@@ -14,12 +14,7 @@ import {
   getRequiredReps, getTypeInfo, MOVEMENT_LIBRARY,
 } from '../../lib/trainingPrograms';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  red: '#E63946', white: '#FFFFFF', gray: '#888888',
-  gold: '#F5C842', green: '#4ade80', inputBg: '#1E1E1E',
-  lightGray: '#CCCCCC', blue: '#42a5f5', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 const LEVEL_ORDER = ['beginner', 'intermediate', 'advanced'];
 
@@ -203,7 +198,9 @@ export default function TrainingLabScreen() {
           <Ionicons name="arrow-back" size={20} color={C.white} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>🥊 Training Lab</Text>
-        <View style={{ width: 38 }} />
+        <TouchableOpacity style={s.backBtn} onPress={() => router.push('/(member)/training-report')} accessibilityLabel="View training report">
+          <Ionicons name="bar-chart-outline" size={20} color={C.gold} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -253,6 +250,7 @@ export default function TrainingLabScreen() {
             const completed = isCompleted(training);
             const typeInfo  = getTypeInfo(training.type);
             const reps      = getRequiredReps(training, currentLevel);
+            const done      = training.repProgress?.[currentLevel] || 0;
 
             return (
               <TouchableOpacity
@@ -302,9 +300,9 @@ export default function TrainingLabScreen() {
                   </View>
                   <Text style={s.trainingReps}>
                     {completed
-                      ? `✓ Completed · ${reps} ${training.type === 'strength' ? 'reps' : 'proper reps'}`
+                      ? `✓ Completed · ${reps} reps`
                       : unlocked
-                        ? `${reps} proper ${training.type === 'strength' ? 'reps' : training.type === 'defense' ? 'reps' : 'reps'} required`
+                        ? (done > 0 ? `${done}/${reps} reps · resume anytime` : `${reps} reps to complete`)
                         : 'Complete previous training to unlock'
                     }
                   </Text>

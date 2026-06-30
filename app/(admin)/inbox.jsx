@@ -1,2 +1,2 @@
-// Admin inbox — full messaging screen
-export { default } from '../../components/InboxScreen';
+// Admin Community/Inbox tab — Forum + Messages segmented hub (mirrors member POV).
+export { default } from '../../components/CommunityHub';

@@ -18,13 +18,7 @@ import { logActivity } from '../../lib/activityLog';
 
 const { width: SW } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  blue: '#42a5f5', white: '#FFFFFF', gray: '#888888',
-  lightGray: '#CCCCCC', inputBg: '#1E1E1E',
-  green: '#4ade80', gold: '#F5C842', red: '#E63946',
-  purple: '#c084fc',
-};
+import { C as COLORS } from '../../lib/theme';
 const LEVEL_COLORS = { Beginner:'#fb923c', Intermediate:'#F5C842', Advanced:'#4ade80' };
 const LEVEL_ICONS  = { Beginner:'🥊', Intermediate:'⚡', Advanced:'🔥' };
 const LEVELS       = ['Beginner', 'Intermediate', 'Advanced'];
@@ -1014,9 +1008,9 @@ const styles = StyleSheet.create({
   newBadge:      { backgroundColor: COLORS.blue + '22', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.blue + '44' },
   newBadgeText:  { fontSize: 9, fontWeight: '800', color: COLORS.blue },
 
-  // Cert modal
-  certModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end' },
-  certModalCard:    { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 12, maxHeight: '80%' },
+  // Cert / training-report modal — centered (not a low bottom-sheet)
+  certModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 16 },
+  certModalCard:    { backgroundColor: COLORS.card, borderRadius: 22, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 12, maxHeight: '85%' },
   certModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   certModalTitle:   { fontSize: 18, fontWeight: '900', color: COLORS.white },
   certMemberName:   { fontSize: 15, fontWeight: '700', color: COLORS.white },

@@ -1,5 +1,2 @@
-import InboxScreen from '../../components/InboxScreen';
-
-export default function ForumScreen() {
-  return <InboxScreen />;
-}
+// Member Community tab — Forum + Messages segmented hub.
+export { default } from '../../components/CommunityHub';

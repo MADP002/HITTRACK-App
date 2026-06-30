@@ -64,7 +64,7 @@ export default function MemberLayout() {
       <Tabs.Screen
         name="forum"
         options={{
-          title: 'Inbox',
+          title: 'Community',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={color} />
           ),
@@ -78,6 +78,8 @@ export default function MemberLayout() {
       <Tabs.Screen name="training-detail"      options={{ href: null }} />
       <Tabs.Screen name="training-camera"      options={{ href: null }} />
       <Tabs.Screen name="training-complete"    options={{ href: null }} />
+      <Tabs.Screen name="training-report"      options={{ href: null }} />
+      <Tabs.Screen name="todays-workout"       options={{ href: null }} />
     </Tabs>
   );
 }

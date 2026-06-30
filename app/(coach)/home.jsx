@@ -11,12 +11,7 @@ import { auth, db } from '../../firebase';
 import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { isClassActive } from '../../lib/classLifecycle';
 
-const C = {
-  bg: '#0A0A0A', card: '#161616', border: '#2A2A2A',
-  blue: '#42a5f5', white: '#FFFFFF', gray: '#888888',
-  green: '#4ade80', gold: '#F5C842', red: '#E63946',
-  inputBg: '#1E1E1E', lightGray: '#CCCCCC', purple: '#c084fc',
-};
+import { C } from '../../lib/theme';
 
 const LEVEL_COLORS = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
 const LEVEL_ICONS  = { Beginner: '🥊', Intermediate: '⚡', Advanced: '🔥' };
@@ -117,10 +112,16 @@ export default function CoachHomeScreen() {
             <Text style={s.coachBadgeText}>COACH PORTAL</Text>
           </View>
         </View>
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={16} color={C.red} />
-          <Text style={s.logoutBtnText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity style={s.announceBtn} onPress={() => router.push('/(coach)/announcements')}>
+            <Ionicons name="megaphone-outline" size={16} color={C.green} />
+            <Text style={s.announceBtnText}>Announce</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={16} color={C.red} />
+            <Text style={s.logoutBtnText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -150,29 +151,6 @@ export default function CoachHomeScreen() {
               <Text style={[s.statVal, { color: st.color }]}>{st.value}</Text>
               <Text style={s.statLabel}>{st.label}</Text>
             </View>
-          ))}
-        </View>
-
-        {/* ── QUICK ACTIONS ── */}
-        <Text style={s.sectionTitle}>Quick Actions</Text>
-        <View style={s.actionsGrid}>
-          {[
-            { icon: 'people-outline',   label: 'View Clients',       color: C.blue,   route: '/(coach)/clients'       },
-            { icon: 'calendar-outline', label: 'Manage Classes',     color: C.gold,   route: '/(coach)/classes'       },
-            { icon: 'megaphone-outline',label: 'Announcements',      color: C.green,  route: '/(coach)/announcements' },
-            { icon: 'chatbubbles-outline', label: 'Inbox',           color: C.purple, route: '/(coach)/forum'         },
-          ].map((action, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[s.actionBtn, { borderColor: action.color + '44' }]}
-              onPress={() => router.push(action.route)}
-              activeOpacity={0.8}
-            >
-              <View style={[s.actionIcon, { backgroundColor: action.color + '22' }]}>
-                <Ionicons name={action.icon} size={22} color={action.color} />
-              </View>
-              <Text style={[s.actionLabel, { color: action.color }]}>{action.label}</Text>
-            </TouchableOpacity>
           ))}
         </View>
 
@@ -289,6 +267,8 @@ const s = StyleSheet.create({
   coachBadgeText:{ fontSize: 9, fontWeight: '800', color: C.blue, letterSpacing: 1 },
   logoutBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.red + '18', borderRadius: 50, borderWidth: 1, borderColor: C.red + '44', paddingHorizontal: 14, paddingVertical: 8 },
   logoutBtnText: { fontSize: 12, fontWeight: '700', color: C.red },
+  announceBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.green + '18', borderRadius: 50, borderWidth: 1, borderColor: C.green + '44', paddingHorizontal: 12, paddingVertical: 8 },
+  announceBtnText: { fontSize: 12, fontWeight: '700', color: C.green },
 
   // Welcome card
   welcomeCard: {
