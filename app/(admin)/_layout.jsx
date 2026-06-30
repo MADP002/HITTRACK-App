@@ -40,7 +40,7 @@ export default function AdminLayout() {
     >
       <Tabs.Screen name="overview"      options={{ title: 'Overview',  tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'grid'         : 'grid-outline'}         size={22} color={color} /> }} />
       <Tabs.Screen name="users"         options={{ title: 'Users',     tabBarBadge: pendingCount > 0 ? pendingCount : undefined, tabBarBadgeStyle: { backgroundColor: RED, fontSize: 10, minWidth: 16, height: 16 }, tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'people'       : 'people-outline'}       size={22} color={color} /> }} />
-      <Tabs.Screen name="inbox"         options={{ title: 'Inbox',     tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'chatbubbles'  : 'chatbubbles-outline'}  size={22} color={color} /> }} />
+      <Tabs.Screen name="inbox"         options={{ title: 'Community',  tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'chatbubbles'  : 'chatbubbles-outline'}  size={22} color={color} /> }} />
       <Tabs.Screen name="leaderboard"   options={{ title: 'Rankings',  tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'trophy'       : 'trophy-outline'}       size={22} color={color} /> }} />
       <Tabs.Screen name="classes"       options={{ title: 'Classes',   tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar'     : 'calendar-outline'}     size={22} color={color} /> }} />
       <Tabs.Screen name="notifications" options={{ title: 'Notify',    tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'megaphone'    : 'megaphone-outline'}    size={22} color={color} /> }} />
