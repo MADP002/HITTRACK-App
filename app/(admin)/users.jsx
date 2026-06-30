@@ -42,6 +42,8 @@ export default function AdminUsersScreen() {
   const [msgText,        setMsgText]        = useState('');
   const [msgThread,      setMsgThread]      = useState([]);
   const [sendingMsg,     setSendingMsg]     = useState(false);
+  const [msgTarget,      setMsgTarget]      = useState(null);  // member OR coach being messaged
+  const msgScrollRef = useRef(null);
 
   // Load admin profile
   useEffect(() => {
@@ -85,21 +87,29 @@ export default function AdminUsersScreen() {
     }, [loadUsers])
   );
 
-  // Live messages for selected member
+  // Live messages for whoever is being messaged (member or coach)
   useEffect(() => {
-    if (!selectedMember || !showMsg) return;
+    if (!msgTarget || !showMsg) return;
     const adminUid = auth.currentUser?.uid;
     if (!adminUid) return;
     const q = query(collection(db, 'messages'), where('participants', 'array-contains', adminUid));
     const unsub = onSnapshot(q, snap => {
       const all    = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const thread = all
-        .filter(m => m.participants?.includes(selectedMember.uid))
+        .filter(m => m.participants?.includes(msgTarget.uid))
         .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
       setMsgThread(thread);
     }, console.error);
     return () => unsub();
-  }, [selectedMember, showMsg]);
+  }, [msgTarget, showMsg]);
+
+  // Keep the latest message in view (so long threads/messages are readable)
+  useEffect(() => {
+    if (showMsg && msgThread.length) {
+      const t = setTimeout(() => msgScrollRef.current?.scrollToEnd({ animated: true }), 120);
+      return () => clearTimeout(t);
+    }
+  }, [showMsg, msgThread.length]);
 
   // ── MEMBER ACTIONS ────────────────────────────────────────────
   const toggleMemberStatus = async (member) => {
@@ -163,14 +173,14 @@ export default function AdminUsersScreen() {
   };
 
   const sendMessage = async () => {
-    if (!msgText.trim() || !selectedMember || sendingMsg) return;
+    if (!msgText.trim() || !msgTarget || sendingMsg) return;
     setSendingMsg(true);
     const adminUid = auth.currentUser?.uid;
     try {
       await addDoc(collection(db, 'messages'), {
-        participants: [adminUid, selectedMember.uid],
-        from: adminUid, fromName: adminProfile.name || 'Admin',
-        to: selectedMember.uid, toName: selectedMember.name || 'Member',
+        participants: [adminUid, msgTarget.uid],
+        from: adminUid, fromName: adminProfile.name || 'Admin', fromRole: 'admin',
+        to: msgTarget.uid, toName: msgTarget.name || 'User', toRole: msgTarget.role || 'member',
         text: msgText.trim(), createdAt: serverTimestamp(),
       });
       setMsgText('');
@@ -405,53 +415,62 @@ export default function AdminUsersScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── MESSAGE MODAL ── */}
+      {/* ── MESSAGE MODAL ── (tall, keyboard-aware chat panel) */}
       <Modal visible={showMsg} transparent animationType="slide" onRequestClose={() => setShowMsg(false)}>
-        <View style={s.modalOverlay}>
-          <View style={[s.modalCard, { maxHeight: '85%' }]}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>💬 Message {selectedMember?.name?.split(' ')[0]}</Text>
-              <TouchableOpacity onPress={() => setShowMsg(false)}>
-                <Ionicons name="close" size={22} color={C.gray} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ flex: 1, marginVertical: 10 }}>
-              {msgThread.length === 0 ? (
-                <View style={{ alignItems: 'center', padding: 30 }}>
-                  <Text style={{ fontSize: 32 }}>💬</Text>
-                  <Text style={{ color: C.gray, fontSize: 13, marginTop: 8 }}>Start a conversation</Text>
-                </View>
-              ) : msgThread.map((m, i) => {
-                const isMe = m.from === auth.currentUser?.uid;
-                return (
-                  <View key={m.id || i} style={[s.msgRow, { justifyContent: isMe ? 'flex-end' : 'flex-start' }]}>
-                    <View style={[s.msgBubble, isMe ? s.msgMe : s.msgThem]}>
-                      <Text style={s.msgText}>{m.text}</Text>
-                      <Text style={s.msgMeta}>{isMe ? 'You' : m.fromName}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-            <View style={s.msgInputRow}>
-              <TextInput
-                style={s.msgInput}
-                value={msgText}
-                onChangeText={setMsgText}
-                placeholder="Type a message..."
-                placeholderTextColor={C.gray}
-                multiline
-              />
-              <TouchableOpacity
-                style={[s.msgSendBtn, (!msgText.trim() || sendingMsg) && { opacity: 0.4 }]}
-                onPress={sendMessage}
-                disabled={!msgText.trim() || sendingMsg}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={s.modalOverlay}>
+            <View style={[s.modalCard, { height: '85%' }]}>
+              <View style={s.modalHeader}>
+                <Text style={s.modalTitle}>💬 Message {msgTarget?.name?.split(' ')[0]}</Text>
+                <TouchableOpacity onPress={() => setShowMsg(false)}>
+                  <Ionicons name="close" size={22} color={C.gray} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                ref={msgScrollRef}
+                style={{ flex: 1 }}
+                contentContainerStyle={msgThread.length === 0 ? s.msgEmptyWrap : s.msgListWrap}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                onContentSizeChange={() => msgScrollRef.current?.scrollToEnd({ animated: false })}
               >
-                {sendingMsg ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="send" size={18} color={C.white} />}
-              </TouchableOpacity>
+                {msgThread.length === 0 ? (
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ fontSize: 32 }}>💬</Text>
+                    <Text style={{ color: C.gray, fontSize: 13, marginTop: 8 }}>Start a conversation</Text>
+                  </View>
+                ) : msgThread.map((m, i) => {
+                  const isMe = m.from === auth.currentUser?.uid;
+                  return (
+                    <View key={m.id || i} style={[s.msgRow, { justifyContent: isMe ? 'flex-end' : 'flex-start' }]}>
+                      <View style={[s.msgBubble, isMe ? s.msgMe : s.msgThem]}>
+                        <Text style={s.msgText}>{m.text}</Text>
+                        <Text style={s.msgMeta}>{isMe ? 'You' : m.fromName}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              <View style={s.msgInputRow}>
+                <TextInput
+                  style={s.msgInput}
+                  value={msgText}
+                  onChangeText={setMsgText}
+                  placeholder="Type a message..."
+                  placeholderTextColor={C.gray}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[s.msgSendBtn, (!msgText.trim() || sendingMsg) && { opacity: 0.4 }]}
+                  onPress={sendMessage}
+                  disabled={!msgText.trim() || sendingMsg}
+                >
+                  {sendingMsg ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="send" size={18} color={C.white} />}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── MEMBER ACTION MODAL ── */}
@@ -520,7 +539,7 @@ export default function AdminUsersScreen() {
                       </TouchableOpacity>
 
                       <TouchableOpacity style={[s.actionBtn, { borderColor: C.blue + '44', backgroundColor: C.blue + '18' }]}
-                        onPress={() => setShowMsg(true)}>
+                        onPress={() => { setMsgTarget(selectedMember); setMsgText(''); setShowMsg(true); }}>
                         <Ionicons name="chatbubble-outline" size={20} color={C.blue} />
                         <Text style={[s.actionBtnText, { color: C.blue }]}>Message</Text>
                       </TouchableOpacity>
@@ -703,8 +722,10 @@ export default function AdminUsersScreen() {
                     <Ionicons name={isActive ? 'pause-outline' : 'play-outline'} size={16} color={isActive ? C.red : C.green} />
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.coachActionBtn, { borderColor: C.blue + '44' }]} onPress={() => {
-                    setSelectedMember(null); // use a simple alert message modal for coaches
-                    Alert.alert('Message', `Message ${c.name} — coming soon.`);
+                    setSelectedMember(null);
+                    setMsgTarget({ uid: c.uid, name: c.name, role: 'coach' });
+                    setMsgText('');
+                    setShowMsg(true);
                   }}>
                     <Ionicons name="chatbubble-outline" size={16} color={C.blue} />
                   </TouchableOpacity>
@@ -795,6 +816,8 @@ const s = StyleSheet.create({
   deleteBtnText: { fontSize: 13, fontWeight: '800', color: C.white },
 
   // Messaging
+  msgListWrap: { paddingVertical: 12, paddingHorizontal: 2, flexGrow: 1, justifyContent: 'flex-end' },
+  msgEmptyWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   msgRow: { flexDirection: 'row', marginVertical: 3, paddingHorizontal: 4 },
   msgBubble: { maxWidth: '78%', borderRadius: 14, padding: 10, borderWidth: 1 },
   msgMe: { backgroundColor: C.red + '22', borderColor: C.red + '44' },
