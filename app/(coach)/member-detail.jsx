@@ -1008,9 +1008,9 @@ const styles = StyleSheet.create({
   newBadge:      { backgroundColor: COLORS.blue + '22', borderRadius: 50, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.blue + '44' },
   newBadgeText:  { fontSize: 9, fontWeight: '800', color: COLORS.blue },
 
-  // Cert modal
-  certModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end' },
-  certModalCard:    { backgroundColor: COLORS.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 12, maxHeight: '80%' },
+  // Cert / training-report modal — centered (not a low bottom-sheet)
+  certModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 16 },
+  certModalCard:    { backgroundColor: COLORS.card, borderRadius: 22, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 12, maxHeight: '85%' },
   certModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   certModalTitle:   { fontSize: 18, fontWeight: '900', color: COLORS.white },
   certMemberName:   { fontSize: 15, fontWeight: '700', color: COLORS.white },

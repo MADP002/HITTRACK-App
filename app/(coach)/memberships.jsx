@@ -101,9 +101,6 @@ export default function CoachMembershipsScreen() {
   return (
     <SafeAreaView edges={['top']} style={s.safe}>
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={C.white} />
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>💳 Memberships</Text>
           <Text style={s.headerSub}>See expiries · send renewal reminders</Text>

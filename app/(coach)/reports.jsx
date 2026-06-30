@@ -61,9 +61,6 @@ export default function CoachReportsScreen() {
     <SafeAreaView edges={['top']} style={s.safe}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={C.white} />
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.headerTitle}>📋 Training Reports</Text>
           <Text style={s.headerSub}>{reports.length} total · {unviewed} new</Text>
@@ -192,9 +189,9 @@ const s = StyleSheet.create({
   emptyTitle:{ fontSize: 17, fontWeight: '800', color: C.white },
   emptySub:  { fontSize: 12, color: C.gray, textAlign: 'center', paddingHorizontal: 30, lineHeight: 18 },
 
-  // Viewer modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end' },
-  modalCard:    { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, borderWidth: 1, borderColor: C.border, maxHeight: '88%' },
+  // Viewer modal — centered
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', padding: 16 },
+  modalCard:    { backgroundColor: C.card, borderRadius: 22, padding: 24, borderWidth: 1, borderColor: C.border, maxHeight: '85%' },
   modalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   modalTitle:   { fontSize: 18, fontWeight: '900', color: C.white },
   reportMember: { fontSize: 16, fontWeight: '800', color: C.white },

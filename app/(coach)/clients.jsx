@@ -73,9 +73,6 @@ export default function ClientsScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={COLORS.white} />
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>👥 Clients</Text>
           <Text style={styles.headerSub}>Welcome, {coachProfile.name}</Text>

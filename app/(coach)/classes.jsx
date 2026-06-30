@@ -227,9 +227,6 @@ export default function ClassesScreen() {
    
       {/* Header */}
      <View style={styles.header}>
-        <TouchableOpacity style={styles.coachBackBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={COLORS.white} />
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>📋 Classes</Text>
           <Text style={styles.headerSub}>{activeClasses.length} active class{activeClasses.length !== 1 ? 'es' : ''}</Text>
