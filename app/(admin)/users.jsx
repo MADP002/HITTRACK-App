@@ -15,6 +15,10 @@ import {
   where, writeBatch,
 } from 'firebase/firestore';
 import { logActivity } from '../../lib/activityLog';
+import {
+  computeMembershipState, daysRemaining, fmtExpiry, fmtRemaining,
+  isExpiringSoon, getStatusColor, getStatusLabel, getStatusIcon, STATUS,
+} from '../../lib/membership';
 
 import { C } from '../../lib/theme';
 const LEVEL_COLORS = { Beginner: '#fb923c', Intermediate: '#F5C842', Advanced: '#4ade80' };
@@ -44,6 +48,13 @@ export default function AdminUsersScreen() {
   const [sendingMsg,     setSendingMsg]     = useState(false);
   const [msgTarget,      setMsgTarget]      = useState(null);  // member OR coach being messaged
   const msgScrollRef = useRef(null);
+
+  // Membership / subscription management (cash-only gym)
+  const [extendTarget,  setExtendTarget]  = useState(null);
+  const [extendDays,    setExtendDays]    = useState('30');
+  const [extendSaving,  setExtendSaving]  = useState(false);
+  const [pauseSaving,   setPauseSaving]   = useState(false);
+  const [remindedThisCycle, setRemindedThisCycle] = useState({});
 
   // Load admin profile
   useEffect(() => {
@@ -232,6 +243,85 @@ export default function AdminUsersScreen() {
       Alert.alert('Done', `${selectedMember.name} has been permanently deleted.`);
     } catch (e) { Alert.alert('Error', e.message); console.error(e); }
     finally { setDeleting(false); }
+  };
+
+  // ── MEMBERSHIP ACTIONS (cash-only Extend + Pause/Resume + Remind) ──
+  const extendMembership = async () => {
+    if (!extendTarget?.uid) return;
+    const days = parseInt(extendDays, 10);
+    if (isNaN(days) || days <= 0) { Alert.alert('Pick a duration', 'Enter a valid number of days.'); return; }
+    setExtendSaving(true);
+    try {
+      const m = extendTarget.membership || {};
+      const currentExp = m.expiresAt ? (m.expiresAt.toMillis ? m.expiresAt.toMillis() : new Date(m.expiresAt).getTime()) : null;
+      const startBase  = (currentExp && currentExp > Date.now()) ? currentExp : Date.now();
+      const newExpires = new Date(startBase + days * 86400000);
+      await updateDoc(doc(db, 'users', extendTarget.uid), {
+        'membership.startedAt':         m.startedAt || new Date(startBase),
+        'membership.expiresAt':         newExpires,
+        'membership.pausedAt':          null,
+        'membership.lastRenewedAt':     serverTimestamp(),
+        'membership.lastRenewedBy':     auth.currentUser?.uid || '',
+        'membership.lastRenewedByName': adminProfile.name || 'Admin',
+      });
+      logActivity({
+        type: 'membership_extended', actorId: auth.currentUser?.uid || '', actorName: adminProfile.name || 'Admin', actorRole: 'admin',
+        payload: { memberId: extendTarget.uid, memberName: extendTarget.name, days, newExpiry: newExpires.toISOString() },
+      });
+      setMembers(prev => prev.map(x => x.uid === extendTarget.uid
+        ? { ...x, membership: { ...(x.membership || {}), startedAt: m.startedAt || new Date(startBase), expiresAt: newExpires, pausedAt: null } }
+        : x));
+      Alert.alert('Extended', `${extendTarget.name} extended by ${days} day${days === 1 ? '' : 's'}.`);
+      setExtendTarget(null); setExtendDays('30');
+    } catch (e) { Alert.alert('Error', e.message); }
+    setExtendSaving(false);
+  };
+
+  // Membership pause (freezes expiry + blocks booking). Resume pushes expiry
+  // forward by the paused duration. Distinct from account Deactivate (login block).
+  const toggleMembershipPause = async (member) => {
+    if (pauseSaving) return;
+    const m = member.membership || {};
+    const isPaused = !!m.pausedAt;
+    setPauseSaving(true);
+    try {
+      if (isPaused) {
+        const pausedMs   = m.pausedAt.toMillis ? m.pausedAt.toMillis() : new Date(m.pausedAt).getTime();
+        const pausedDays = Math.max(0, Math.floor((Date.now() - pausedMs) / 86400000));
+        const curExp     = m.expiresAt ? (m.expiresAt.toMillis ? m.expiresAt.toMillis() : new Date(m.expiresAt).getTime()) : Date.now();
+        const newExp     = new Date(curExp + pausedDays * 86400000);
+        await updateDoc(doc(db, 'users', member.uid), {
+          'membership.pausedAt': null, 'membership.expiresAt': newExp,
+          'membership.totalPauseDays': (m.totalPauseDays || 0) + pausedDays,
+        });
+        setMembers(prev => prev.map(x => x.uid === member.uid ? { ...x, membership: { ...m, pausedAt: null, expiresAt: newExp, totalPauseDays: (m.totalPauseDays || 0) + pausedDays } } : x));
+      } else {
+        await updateDoc(doc(db, 'users', member.uid), { 'membership.pausedAt': serverTimestamp() });
+        setMembers(prev => prev.map(x => x.uid === member.uid ? { ...x, membership: { ...m, pausedAt: new Date() } } : x));
+      }
+    } catch (e) { Alert.alert('Error', e.message); }
+    setPauseSaving(false);
+  };
+
+  const sendMembershipReminder = async (member) => {
+    if (remindedThisCycle[member.uid]) { Alert.alert('Already reminded', 'You already nudged this member this session.'); return; }
+    try {
+      const days = daysRemaining(member.membership);
+      const dayLabel = days === null ? 'soon'
+        : days < 0  ? `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`
+        : days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`;
+      await addDoc(collection(db, 'notifications'), {
+        type: 'membership_reminder',
+        title: days < 0 ? '🔒 Membership has expired' : '⚠ Membership renewal reminder',
+        message: days < 0
+          ? `Your membership expired ${dayLabel}. Speak with the gym admin to renew and unlock class bookings.`
+          : `Your membership expires ${dayLabel}. Please coordinate with the gym admin to renew before access is locked.`,
+        audience: 'member', targetUserId: member.uid,
+        from: adminProfile.name || 'Admin', fromUid: auth.currentUser?.uid || '', createdAt: serverTimestamp(),
+      });
+      setRemindedThisCycle(prev => ({ ...prev, [member.uid]: true }));
+      Alert.alert('Reminder sent', `Nudged ${member.name} to renew.`);
+    } catch (e) { Alert.alert('Error', e.message); }
   };
 
   // ── COACH ACTIONS ─────────────────────────────────────────────
@@ -578,6 +668,7 @@ export default function AdminUsersScreen() {
         {[
           { id: 'members', label: 'Members', count: members.length },
           { id: 'coaches', label: 'Coaches', count: coaches.length + pending.length },
+          { id: 'memberships', label: 'Subs', count: members.length },
         ].map(t => {
           const active = subTab === t.id;
           return (
@@ -735,6 +826,146 @@ export default function AdminUsersScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* ── MEMBERSHIPS (SUBS) TAB ── */}
+      {subTab === 'memberships' && (() => {
+        const active   = members.filter(x => computeMembershipState(x.membership) === STATUS.ACTIVE).length;
+        const trial    = members.filter(x => computeMembershipState(x.membership) === STATUS.TRIAL).length;
+        const expired  = members.filter(x => computeMembershipState(x.membership) === STATUS.EXPIRED).length;
+        const paused   = members.filter(x => computeMembershipState(x.membership) === STATUS.PAUSED).length;
+        const expiring = members.filter(x => {
+          const st = computeMembershipState(x.membership);
+          if (st !== STATUS.ACTIVE && st !== STATUS.TRIAL) return false;
+          const d = daysRemaining(x.membership);
+          return d !== null && d >= 0 && d <= 7;
+        }).length;
+        const stats = [
+          { label: 'Active',   val: active,   color: C.green },
+          { label: 'Trial',    val: trial,    color: C.blue },
+          { label: 'Expiring', val: expiring, color: C.gold },
+          { label: 'Expired',  val: expired,  color: C.red },
+          { label: 'Paused',   val: paused,   color: C.gray },
+        ];
+        const rank = { expired: 0, active: 1, trial: 2, paused: 3, legacy: 4, none: 5 };
+        const sorted = [...filteredMembers].sort((a, b) => {
+          const ra = rank[computeMembershipState(a.membership)] ?? 9;
+          const rb = rank[computeMembershipState(b.membership)] ?? 9;
+          if (ra !== rb) return ra - rb;
+          return (daysRemaining(a.membership) ?? 9999) - (daysRemaining(b.membership) ?? 9999);
+        });
+        return (
+          <>
+            <View style={s.searchRow}>
+              <View style={s.searchBox}>
+                <Ionicons name="search-outline" size={16} color={C.gray} />
+                <TextInput style={s.searchInput} placeholder="Search members..." placeholderTextColor={C.gray}
+                  value={searchQ} onChangeText={setSearchQ} autoCapitalize="none" autoCorrect={false} />
+                {searchQ.length > 0 && <TouchableOpacity onPress={() => setSearchQ('')}><Ionicons name="close-circle" size={16} color={C.gray} /></TouchableOpacity>}
+              </View>
+            </View>
+            <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadUsers(); }} tintColor={C.red} />}>
+              <View style={s.subStatRow}>
+                {stats.map((st, i) => (
+                  <View key={i} style={[s.subStatCell, { borderColor: st.color + '33', backgroundColor: st.color + '10' }]}>
+                    <Text style={[s.subStatVal, { color: st.color }]}>{st.val}</Text>
+                    <Text style={s.subStatLabel}>{st.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {sorted.length === 0 ? (
+                <View style={s.emptyBox}><Text style={{ fontSize: 40 }}>💳</Text><Text style={s.emptyTitle}>No members found</Text></View>
+              ) : sorted.map(m => {
+                const state    = computeMembershipState(m.membership);
+                const col      = getStatusColor(state);
+                const isPaused = state === STATUS.PAUSED;
+                const expiringSoon = isExpiringSoon(m.membership);
+                const isExpired = state === STATUS.EXPIRED;
+                const reminded = !!remindedThisCycle[m.uid];
+                return (
+                  <View key={m.uid} style={[s.subRow, { borderColor: col + '33' }]}>
+                    <View style={[s.memberAccent, { backgroundColor: col }]} />
+                    <View style={{ flex: 1, gap: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <Text style={s.memberName} numberOfLines={1}>{m.name}</Text>
+                        <View style={[s.chip, { backgroundColor: col + '22', borderColor: col + '44' }]}>
+                          <Text style={[s.chipText, { color: col }]}>{getStatusIcon(state)} {getStatusLabel(state)}</Text>
+                        </View>
+                      </View>
+                      <Text style={s.subExpiry}>
+                        {isPaused ? '⏸ Paused — expiry frozen'
+                          : m.membership?.expiresAt ? `${fmtRemaining(m.membership)} · expires ${fmtExpiry(m.membership)}`
+                          : 'No active plan'}
+                      </Text>
+                      <View style={s.subActions}>
+                        <TouchableOpacity style={[s.subBtn, { borderColor: C.green + '44', backgroundColor: C.green + '14' }]}
+                          onPress={() => { setExtendDays('30'); setExtendTarget(m); }}>
+                          <Text style={[s.subBtnText, { color: C.green }]}>🗓 Extend</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[s.subBtn, { borderColor: (isPaused ? C.green : C.gold) + '44', backgroundColor: (isPaused ? C.green : C.gold) + '14' }]}
+                          onPress={() => toggleMembershipPause(m)} disabled={pauseSaving}>
+                          <Text style={[s.subBtnText, { color: isPaused ? C.green : C.gold }]}>{isPaused ? '▶ Resume' : '⏸ Pause'}</Text>
+                        </TouchableOpacity>
+                        {(isExpired || expiringSoon) && (
+                          <TouchableOpacity style={[s.subBtn, { borderColor: C.blue + '44', backgroundColor: reminded ? C.inputBg : C.blue + '14' }]}
+                            onPress={() => sendMembershipReminder(m)} disabled={reminded}>
+                            <Text style={[s.subBtnText, { color: reminded ? C.gray : C.blue }]}>{reminded ? '✓ Sent' : '📣 Remind'}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </>
+        );
+      })()}
+
+      {/* ── EXTEND MEMBERSHIP MODAL ── */}
+      <Modal visible={!!extendTarget} transparent animationType="slide" onRequestClose={() => !extendSaving && setExtendTarget(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={s.modalOverlay}>
+            <View style={[s.modalCard, { borderColor: C.green + '44' }]}>
+              <View style={s.modalHeader}>
+                <Text style={[s.modalTitle, { color: C.green }]}>🗓 Extend Membership</Text>
+                {!extendSaving && <TouchableOpacity onPress={() => setExtendTarget(null)}><Ionicons name="close" size={22} color={C.gray} /></TouchableOpacity>}
+              </View>
+              {extendTarget && (() => {
+                const m = extendTarget.membership || {};
+                const days = parseInt(extendDays, 10);
+                const currentExp = m.expiresAt ? (m.expiresAt.toMillis ? m.expiresAt.toMillis() : new Date(m.expiresAt).getTime()) : null;
+                const startBase = (currentExp && currentExp > Date.now()) ? currentExp : Date.now();
+                const preview = (!isNaN(days) && days > 0) ? new Date(startBase + days * 86400000) : null;
+                const PRESETS = [{ label: '+1 mo', days: 30 }, { label: '+3 mo', days: 90 }, { label: '+6 mo', days: 180 }, { label: '+1 yr', days: 365 }];
+                return (
+                  <>
+                    <Text style={s.modalSub}>{extendTarget.name} — {m.expiresAt ? `expires ${fmtExpiry(m)}` : 'no active plan yet'}</Text>
+                    <View style={s.presetRow}>
+                      {PRESETS.map(p => {
+                        const active = String(p.days) === String(extendDays);
+                        return (
+                          <TouchableOpacity key={p.days} style={[s.presetBtn, active && { backgroundColor: C.green + '22', borderColor: C.green + '66' }]} onPress={() => setExtendDays(String(p.days))}>
+                            <Text style={[s.presetText, active && { color: C.green }]}>{p.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text style={[s.subStatLabel, { marginTop: 14, marginBottom: 4 }]}>OR CUSTOM (DAYS)</Text>
+                    <TextInput style={s.extendInput} value={extendDays} onChangeText={setExtendDays} keyboardType="number-pad" placeholder="30" placeholderTextColor={C.gray} />
+                    {preview && <Text style={s.previewText}>New expiry: <Text style={{ color: C.green, fontWeight: '800' }}>{preview.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</Text></Text>}
+                    <Text style={s.cashNote}>💵 Cash-only — no amount recorded. A note goes to the activity log.</Text>
+                    <TouchableOpacity style={[s.extendConfirm, (isNaN(days) || days <= 0 || extendSaving) && { opacity: 0.5 }]} onPress={extendMembership} disabled={isNaN(days) || days <= 0 || extendSaving}>
+                      {extendSaving ? <ActivityIndicator size="small" color="#000" /> : <Text style={s.extendConfirmText}>🗓 Extend Membership</Text>}
+                    </TouchableOpacity>
+                  </>
+                );
+              })()}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -842,4 +1073,25 @@ const s = StyleSheet.create({
   rejectBtnText: { fontSize: 11, fontWeight: '800', color: C.red },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   coachActionBtn: { width: 34, height: 34, borderRadius: 9, backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center' },
+
+  // Memberships (Subs) tab
+  subStatRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  subStatCell: { flexGrow: 1, flexBasis: '17%', borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  subStatVal: { fontSize: 20, fontWeight: '900' },
+  subStatLabel: { fontSize: 8, color: C.gray, fontWeight: '800', letterSpacing: 0.6, marginTop: 2, textTransform: 'uppercase' },
+  subRow: { flexDirection: 'row', gap: 10, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, padding: 14, paddingLeft: 16, overflow: 'hidden', position: 'relative' },
+  subExpiry: { fontSize: 11, color: C.gray },
+  subActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  subBtn: { borderRadius: 50, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
+  subBtnText: { fontSize: 11, fontWeight: '800' },
+
+  // Extend modal
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  presetBtn: { flexGrow: 1, flexBasis: '22%', alignItems: 'center', backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingVertical: 12 },
+  presetText: { fontSize: 13, fontWeight: '800', color: C.lightGray },
+  extendInput: { backgroundColor: C.inputBg, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 48, color: C.white, fontSize: 16, fontWeight: '700' },
+  previewText: { fontSize: 13, color: C.lightGray, marginTop: 12 },
+  cashNote: { fontSize: 10, color: C.gray, lineHeight: 16, marginTop: 8 },
+  extendConfirm: { backgroundColor: C.green, borderRadius: 14, height: 50, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
+  extendConfirmText: { fontSize: 14, fontWeight: '900', color: '#04210f' },
 });
